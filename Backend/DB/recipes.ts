@@ -48,14 +48,14 @@ export class RecipeAPI{
             let [data]=await conn.execute<ResultSetHeader>("INSERT INTO recipes(name,authorID,uuid,images,typeID,cookingTime,difficulty,description,uploadTime) SELECT ?,u.id,?,?,t.id,?,?,?,? FROM users u INNER JOIN types t ON t.name=? WHERE u.username=?",[name,uuid,stringified,cookingTime,difficulty,description,new Date(),type,author])
             if(data.affectedRows==0){
                 await conn.rollback();
-                return Promise.reject("User or Type does not exist")
+                return Promise.reject({message:"User or Type does not exist",status:400})
             }
             await conn.commit();
         }
         catch(e){
             console.log(e);
             await conn.rollback();
-            throw "Could not complete create"
+            throw {message:"Could not complete create",status:500}
         }
     }
     static async remove_recipe(conn:mysql.Connection,uuid:UUID):Promise<void>{
@@ -66,7 +66,7 @@ export class RecipeAPI{
 
             if(data.affectedRows==0){
                 await conn.rollback();
-                return Promise.reject("Recipe does not exist")
+                return Promise.reject({message:"Recipe does not exist",status:400})
             }
 
             await conn.commit();
@@ -74,7 +74,7 @@ export class RecipeAPI{
         catch(e){
             console.log(e);
             await conn.rollback();
-            throw "Could not remove recipe"
+            throw {message:"Could not remove recipe",status:500}
         }
     }
 
@@ -84,13 +84,13 @@ export class RecipeAPI{
             let [data]=await conn.execute<ResultSetHeader>("INSERT INTO reviews(recipeID,userID,rating,comment,uploadTime) SELECT r.id,u.id,?,?,? FROM recipes r INNER JOIN users u WHERE u.username=? AND r.uuid=?",[rating,comment,new Date(),rater,uuid])
             if(data.affectedRows==0){
                 await conn.rollback();
-                return Promise.reject("Recipe or User does not exist")
+                return Promise.reject({message:"Recipe or User does not exist",status:400})
             }
             await conn.commit();
         }
         catch(e){
             await conn.rollback();
-            throw "Could not rate recipe"
+            throw {message:"Could not rate recipe",status:500}
         }
     }
     static async get_all_reviews(conn:mysql.Connection,uuid:UUID):Promise<Review[]>{
@@ -101,7 +101,7 @@ export class RecipeAPI{
             return res;
         }
         catch(e){
-            throw "Could not fetch reviews"
+            throw {message:"Could not fetch reviews",status:500}
         }
     }
     static async get_recipe_data(conn:mysql.Connection,uuid:UUID):Promise<Recipe>{
@@ -110,13 +110,13 @@ export class RecipeAPI{
         try{
             let [res]=await conn.query<recipe[]>("SELECT r.uuid,r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime as cookTime,r.difficulty,r.description,r.uploadTime as time FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID LEFT JOIN reviews rev ON rev.recipeID=r.id WHERE r.uuid=? GROUP BY r.id, r.name, r.images, u.username, t.name, r.cookingTime, r.difficulty, r.description, r.uploadTime ",[uuid]);
             if(res.length==0){
-                return Promise.reject("Recipe does not exist")
+                return Promise.reject({message:"Recipe does not exist",status:400})
             }
             return res[0];
         }
         catch(e){
             console.log(e);
-            throw "Could not fetch recipe"
+            throw {message:"Could not fetch recipe",status:500}
         }
 
     }
@@ -127,7 +127,7 @@ export class RecipeAPI{
             return res;
         }
         catch(e){
-            throw "Could not fetch recipes"
+            throw {message:"Could not fetch recipes",status:500}
         }
 
     }
@@ -140,7 +140,7 @@ export class RecipeAPI{
         }
         catch(e){
             await conn.rollback();
-            throw "Could not add type"
+            throw {message:"Could not add type",status:500}
         }
     }
     static async get_types(conn:mysql.Connection):Promise<string[]>{
@@ -154,7 +154,7 @@ export class RecipeAPI{
             return types;
         }
         catch(e){
-            throw "Could not get types"
+            throw {message:"Could not get types",status:500}
         }
     }
 }
@@ -167,7 +167,7 @@ export class PrivateListAPI{
         }
         catch(e){
             await conn.rollback();
-            throw "Could not add recipe to list"
+            throw {message:"Could not add recipe to list",status:500}
         }
     }
     static async remove_from_list(conn:mysql.Connection,uuid:UUID,user:string):Promise<void>{
@@ -178,7 +178,7 @@ export class PrivateListAPI{
         }
         catch(e){
             await conn.rollback();
-            throw "Could not add recipe to list"
+            throw {message:"Could not add recipe to list",status:500}
         }
     }
     static async get_list(conn:mysql.Connection,user:string):Promise<Recipe[]>{
@@ -188,7 +188,7 @@ export class PrivateListAPI{
             return res;
         }
         catch(e){
-            throw "Could not get list"
+            throw {message:"Could not get list",status:500}
         }
     }
 }

@@ -44,19 +44,45 @@ export class UserAPI{
             let salt=await bcrypt.genSalt(10);
             let hashed=await bcrypt.hash(password,salt);
         
-            await conn.execute("INSERT INTO users(username,name,image,password,email,description,telephone,uploadTime) VALUES(?,?,?,?,?,?,?,?)",[username,name,image,hashed,email,description,tel,new Date()]);
+            await conn.execute("INSERT INTO users(username,name,image,password,email,description,telephone,uploadTime,active) VALUES(?,?,?,?,?,?,?,?,false)",[username,name,image,hashed,email,description,tel,new Date()]);
             await conn.commit();
         }catch(e){
             await conn.rollback();
-            throw "Could not complete create"
+            throw {message:"Could not complete create",status:500}
+        }
+    }
+    static async activate_account(conn:mysql.Connection,username:string){
+        await conn.beginTransaction();
+        try{
+            let [data]=await conn.execute<ResultSetHeader>("UPDATE users SET active=true WHERE username=?");
+            if(data.affectedRows==0){
+                return Promise.reject({message:"No user with this name",status:400})
+            }
+            await conn.commit();
+        }catch(e){
+            await conn.rollback();
+            throw {message:"Could not complete activation",status:500}
+        }
+    }
+    static async delete_account(conn:mysql.Connection,username:string){
+        await conn.beginTransaction();
+        try{
+            let [data]=await conn.execute<ResultSetHeader>("UPDATE users SET active=false WHERE username=?");
+            if(data.affectedRows==0){
+                return Promise.reject({message:"No user with this name",status:400})
+            }
+            await conn.commit();
+        }catch(e){
+            await conn.rollback();
+            throw {message:"Could not complete activation",status:500}
         }
     }
     static async log_in(conn:mysql.Connection,username:string, password:string):Promise<boolean>{
         interface hashed extends RowDataPacket{password:string}
         try{
-            let [res]=await conn.query<hashed[]>("SELECT password FROM users WHERE username=?",[username])
+            let [res]=await conn.query<hashed[]>("SELECT password FROM users WHERE username=? AND active=true",[username])
             if(res.length==0){
-                return Promise.reject("No user with this name")
+                return Promise.reject({message:"No user with this name",status:400})
             }
 
             let hash=res[0].password;
@@ -64,7 +90,7 @@ export class UserAPI{
             return success;
             
         }catch(e){
-            throw "Could not log in";
+            throw {message:"Could not log in",status:500}
         }
     }
     static async change_password(conn:mysql.Connection,user:string,new_password:string):Promise<void>{
@@ -76,13 +102,13 @@ export class UserAPI{
             let [data]=await conn.execute<ResultSetHeader>("UPDATE users SET password=? WHERE username=?",[hashed,user]);
             if(data.affectedRows==0){
                 await conn.rollback();
-                return Promise.reject("Could not find user")
+                return Promise.reject({message:"Could not find user",status:400})
             }
 
             await conn.commit();
         }catch(e){
             await conn.rollback();
-            throw "Could not change password";
+            throw {message:"Could not change password",status:500}
         }
     }
     static async get_data(conn:mysql.Connection,username:string):Promise<User>{
@@ -90,13 +116,13 @@ export class UserAPI{
         interface user extends RowDataPacket,UserInterface{}
 
         try{
-            let [res]=await conn.query<user[]>("SELECT username,name,image,email,telephone,description,uploadTime as time FROM users WHERE username=?",[username])
+            let [res]=await conn.query<user[]>("SELECT username,name,image,email,telephone,description,uploadTime as time FROM users WHERE username=? AND active=true",[username])
             if(res.length==0){
-                return Promise.reject("Could not find user")
+                return Promise.reject({message:"Could not find user",status:400})
             }
             return res[0] as User;
         }catch(e){
-            throw "Could not get user data";
+            throw {message:"Could not get user data",status:500}
         }
     }
 }
@@ -143,31 +169,31 @@ export class TokenAPI{
             let exp=new Date();
             exp.setDate(exp.getDate()+get_exp_days(purpose));
 
-            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO authTokens(value,expiration,userID,purpose) SELECT ?,?,u.id,? FROM users u WHERE u.username=?",[rnd,exp,purpose,username]);
+            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO authTokens(value,expiration,userID,purpose) SELECT ?,?,u.id,? FROM users u WHERE u.username=? AND (?=1 OR u.active=true)",[rnd,exp,purpose,username,purpose]);
             if(data.affectedRows==0){
                 await conn.rollback();
-                return Promise.reject("Could not find user")
+                return Promise.reject({message:"Could not find user",status:400})
             }
             await conn.commit();
 
             return rnd;
         }catch(e){
             await conn.rollback();
-            throw "Could not issue token";
+            throw {message:"Could not issue token",status:500};
         }
     }
     static async verify_auth_token(conn:mysql.Connection,at:string,purpose:TokenPurpose):Promise<string>{
         interface token extends RowDataPacket{expiration:Date,username:string,purpose:TokenPurpose};
         try{
-            let [res]=await conn.query<token[]>("SELECT value,expiration,u.username,purpose FROM authTokens at INNER JOIN users u ON u.id=at.userID WHERE value=? AND purpose=?",[at,purpose])
+            let [res]=await conn.query<token[]>("SELECT value,expiration,u.username,purpose FROM authTokens at INNER JOIN users u ON u.id=at.userID WHERE value=? AND purpose=? AND (?=1 OR u.active=true)",[at,purpose,purpose])
             if(res.length==0 || res[0].expiration<new Date()){
-                return Promise.reject("Invalid token")
+                return Promise.reject({message:"Invalid token",status:400})
             }else{
                 return res[0].username;
             }
             
         }catch(e){
-            throw "Could not verify token";
+            throw {message:"Could not verify token",status:500}
         }
     }
    
