@@ -42,13 +42,26 @@ export class UserAPI{
             throw "Could not fetch db idx";
         }
     }
+    static async get_username(conn:mysql.Connection,userID:Number):Promise<String|null>{
+        interface username extends RowDataPacket{username:String}
+        try{
+            let [res]=await conn.query<username[]>("SELECT username FROM users WHERE id=?",[userID])
+            if(res.length==0){
+                return null;
+            }else{
+                return res[0].username;
+            }
+        }catch(e){
+            throw "Could not fetch db idx";
+        }
+    }
     static async sign_up(username:String, name:String, image:String, password:String, email:String|undefined, description:String, tel:String|undefined):Promise<void>{
         let conn=await pool.getConnection();
         await conn.beginTransaction();
         let id=await this.get_user_id(conn,username);
         
         if(typeof(id)=="number"){
-            return Promise.reject("A recipe with the same author and name already exists");
+            return Promise.reject("A user with the same username already exists");
         }
         let salt=await bcrypt.genSalt(10);
         let hashed=await bcrypt.hash(password.toString(),salt);

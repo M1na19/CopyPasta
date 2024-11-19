@@ -1,111 +1,183 @@
 import { pool } from "./db";
 import { UserAPI } from "./user";
-import mysql, { RowDataPacket } from 'mysql2/promise'
-export class RecipeID{
-    name:String
-    authorID:Number
-    constructor(nm:String,athID:Number){
-        this.name=nm;
-        this.authorID=athID;
-    }
-}
+import mysql, { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
+import bcrypt from 'bcrypt'
+import { UUID } from "crypto";
 export class Review{
-    author!:String
-    rating!:Number
-    comment!:String
-    time!:Date
+    author:string
+    rating:number
+    comment:string
+    time:Date
+    constructor(ath:string,rtg:number,comment:string,time:Date){
+        this.author=ath;
+        this.rating=rtg;
+        this.comment=comment;
+        this.time=time;
+    }
 }
 export class Recipe{
-    id!:RecipeID
-    images!:String[]
-    rating!:Number
-    type!:String
-    cookTime!:Number
-    difficulty!:Number
-    description!:String
-    time!:Date
+    guid:number
+    name:string
+    author:string
+    images:string[]
+    rating:number|null
+    type:string
+    cookTime:number
+    difficulty:number
+    description:string
+    time:Date
+    constructor(gid:number,nm:string,ath:string,imgs:string[],rtg:number|null,typ:string,cT:number,diff:number,desc:string,tm:Date){
+        this.guid=gid;
+        this.name=nm;
+        this.author=ath;
+        this.images=imgs;
+        this.rating=rtg;
+        this.type=typ;
+        this.cookTime=cT;
+        this.description=desc;
+        this.difficulty=diff;
+        this.time=tm;
+    }
 }
 export class RecipeAPI{
-    static async check_for_recipeID(conn:mysql.Connection,rID:RecipeID):Promise<Number|null>{
-        interface id extends RowDataPacket{id:number}
+    static async create_recipe(conn:mysql.Connection,name:string,author:string,images:string[],type:number,cookingTime:number,difficulty:number,description:string):Promise<void>{
+        await conn.beginTransaction();
         try{
-            let [res]=await conn.query<id[]>("SELECT id FROM recipes WHERE name=? AND authorID",[rID.name,rID.authorID])
-            if(res.length==0){
-                return null;
-            }else{
-                return res[0].id;
+            let uuid=crypto.randomUUID()
+            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO recipes(name,authorID,uuid,images,typeID,cookingTime,difficulty,description,uploadTime) SELECT ?,u.id,?,?,?,?,?,?,?,? FROM users u WHERE username=?)",[name,uuid,images.join(';'),type,cookingTime,difficulty,description,new Date(),author])
+            if(data.affectedRows==0){
+                await conn.rollback();
+                throw "User does not exist"
             }
-        }catch(e){
-            throw "Could not fetch db idx";
-        }
-    }
-    //Don t allow recipes with same name and author
-    static async create_recipe(rID:RecipeID,images:String[],type:Number,cookingTime:Number,difficulty:Number,description:String):Promise<void>{
-        let conn=await pool.getConnection();
-        await conn.beginTransaction();
-        let id=await this.check_for_recipeID(conn,rID);
-        if(typeof(id)=="number"){
-            return Promise.reject("A recipe with the same author and name already exists");
-        }
-        try{
-            await conn.execute("INSERT INTO recepies(name,authorID,images,type,cookingTime,difficulty,description,uploadTime) VALUES(?,?,?,?,?,?,?,?,?)",[rID.name,rID.authorID,images.toString(),type,cookingTime,difficulty,description,new Date()])
             await conn.commit();
-            conn.release();
         }
         catch(e){
             await conn.rollback();
-            conn.release();
-            return Promise.reject("Could not complete create")
+            throw "Could not complete create"
         }
     }
-    static async remove_recipe(rID:RecipeID):Promise<void>{
-        let conn=await pool.getConnection();
+    static async remove_recipe(conn:mysql.Connection,uuid:UUID):Promise<void>{
         await conn.beginTransaction();
-        let id=await this.check_for_recipeID(conn,rID);
-        if(id==null){
-            return Promise.reject("This recipe does not exist");
-        }
         try{
-            await conn.execute("DELETE FROM recipes WHERE id=?",[id])
+            await conn.execute("DELETE rev FROM reviews rev INNER JOIN recipes rec ON rev.recipeID=rec.id WHERE rec.uuid=?",[uuid])
+            let [data]=await conn.execute<ResultSetHeader>("DELETE FROM recipes WHERE uuid=?",[uuid])
+
+            if(data.affectedRows==0){
+                await conn.rollback();
+                throw "Recipe does not exist"
+            }
+
             await conn.commit();
-            conn.release();
         }
         catch(e){
             await conn.rollback();
-            conn.release();
-            return Promise.reject("Could not remove recipe")
+            throw "Could not remove recipe"
         }
     }
-    static async rate_recipe(rID:RecipeID,raterID:Number,rating:Number,comment:String):Promise<void>{
+
+    static async rate_recipe(conn:mysql.Connection,uuid:UUID,rater:string,rating:number,comment:string):Promise<void>{
+        await conn.beginTransaction();
+        try{
+            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO reviews(recipeID,userID,rating,comment,uploadTime) SELECT r.id,u.id,?,?,? FROM recipes r INNER JOIN users u WHERE u.username=? AND r.uuid=?",[uuid,rater,rating,comment,new Date()])
+            if(data.affectedRows==0){
+                await conn.rollback();
+                throw "Recipe or User does not exist"
+            }
+            await conn.commit();
+        }
+        catch(e){
+            await conn.rollback();
+            throw "Could not rate recipe"
+        }
+    }
+    static async get_all_reviews(conn:mysql.Connection,uuid:UUID):Promise<Review[]>{
+        interface review extends RowDataPacket, InstanceType<typeof Review>{}
+
+        try{
+            let [res]=await conn.query<review[]>("SELECT u.username as author,rev.rating,rev.comment,rev.uploadTime FROM reviews as rev INNER JOIN users as u ON rev.userID=u.id INNER JOIN recipes rec ON rev.recipeID=rec.id WHERE rec.uuid=?",[uuid]);
+            return res;
+        }
+        catch(e){
+            throw "Could not fetch reviews"
+        }
+    }
+    static async get_recipe_data(conn:mysql.Connection,uuid:UUID):Promise<Recipe>{
+        interface recipe extends RowDataPacket, InstanceType<typeof Recipe>{}
+        
+        try{
+            let [res]=await conn.query<recipe[]>("SELECT r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime,r.difficulty,r.description,r.uploadTime FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID INNER JOIN reviews rev ON rev.recipeID=r.id WHERE r.uuid=?",[uuid]);
+            if(res.length==0){
+                throw "Recipe does not exist"
+            }
+            return res[0];
+        }
+        catch(e){
+            throw "Could not fetch recipe"
+        }
 
     }
-    static async get_all_reviews(rID:RecipeID):Promise<Review[]>{
-        return Promise.reject();
-    }
-    static async get_recipe_data(rID:RecipeID):Promise<Recipe>{
-        return Promise.reject();
+    static async get_all_recipes(conn:mysql.Connection):Promise<Recipe[]>{
+        interface recipe extends RowDataPacket, InstanceType<typeof Recipe>{}
+        try{
+            let [res]=await conn.query<recipe[]>("SELECT r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime,r.difficulty,r.description,r.uploadTime FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID INNER JOIN reviews rev ON rev.recipeID=r.id");
+            return res;
+        }
+        catch(e){
+            throw "Could not fetch recipes"
+        }
 
     }
-    static async get_all_recipies():Promise<Recipe[]>{
-        return Promise.reject();
-
+    static async add_type(conn:mysql.Connection,type:string):Promise<void>{
+        await conn.beginTransaction();
+        
+        try{
+            await conn.execute("INSERT INTO types(name) VALUES(?)",[type])
+            await conn.commit();
+        }
+        catch(e){
+            await conn.rollback();
+            throw "Could not add type"
+        }
     }
-    static async add_type(type:String):Promise<void>{
+    static async get_types(conn:mysql.Connection):Promise<string[]>{
+        interface type extends RowDataPacket{name:string}
+        try{
+            let [res]=await conn.query<type[]>("SELECT name FROM types",[]);
+            
+            let types:string[]=[];
+            res.forEach((tp)=>{types.push(tp.name)});
 
-    }
-    static async get_types():Promise<String[]>{
-        return Promise.reject();
+            return types;
+        }
+        catch(e){
+            throw "Could not get types"
+        }
     }
 }
 export class PrivateListAPI{
-    static async add_to_list(rID:RecipeID,userID:Number):Promise<void>{
-
+    static async add_to_list(conn:mysql.Connection,uuid:UUID,user:string):Promise<void>{
+        await conn.beginTransaction();
+        try{
+            await conn.execute("INSERT INTO privateList(recipeID,userID) SELECT r.id,u.id FROM recipes r INNER JOIN user u WHERE r.uuid=? AND u.username=?",[uuid,user])
+            await conn.commit();
+        }
+        catch(e){
+            await conn.rollback();
+            throw "Could not add recipe to list"
+        }
     }
-    static async remove_from_list(rID:RecipeID,userID:Number):Promise<void>{
-
+    static async remove_from_list(conn:mysql.Connection,uuid:UUID,user:string):Promise<void>{
+        await conn.beginTransaction();
+        try{
+            await conn.execute("DELETE FROM privateList pl INNER JOIN user u ON pl.userID=u.id INNER JOIN recipes r ON r.id=pl.recipeID WHERE r.uuid=? AND u.username=?",[uuid,user]);
+            await conn.commit();
+        }
+        catch(e){
+            await conn.rollback();
+            throw "Could not add recipe to list"
+        }
     }
-    static async get_list(rID:RecipeID,userID:Number):Promise<Recipe[]>{
-        return Promise.reject();
-
+    static async get_list(userID:number):Promise<Recipe[]>{
+        throw "Reject"
     }
 }
