@@ -15,18 +15,18 @@ export class Review{
     }
 }
 export class Recipe{
-    guid:number
+    uuid:number
     name:string
     author:string
     images:string[]|null
     rating:number|null
-    type:string|null
+    type:string
     cookTime:number|null
     difficulty:number|null
     description:string|null
     time:Date
-    constructor(gid:number,nm:string,ath:string,imgs:string[]|null,rtg:number|null,typ:string|null,cT:number|null,diff:number|null,desc:string|null,tm:Date){
-        this.guid=gid;
+    constructor(gid:number,nm:string,ath:string,imgs:string[]|null,rtg:number|null,typ:string,cT:number|null,diff:number|null,desc:string|null,tm:Date){
+        this.uuid=gid;
         this.name=nm;
         this.author=ath;
         this.images=imgs;
@@ -39,18 +39,21 @@ export class Recipe{
     }
 }
 export class RecipeAPI{
-    static async create_recipe(conn:mysql.Connection,name:string,author:string,images:string[]|null,type:string|null,cookingTime:number|null,difficulty:number|null,description:string|null):Promise<void>{
+    static async create_recipe(conn:mysql.Connection,name:string,author:string,images:string[]|null,type:string,cookingTime:number|null,difficulty:number|null,description:string|null):Promise<void>{
         await conn.beginTransaction();
         try{
             let uuid=crypto.randomUUID()
-            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO recipes(name,authorID,uuid,images,typeID,cookingTime,difficulty,description,uploadTime) SELECT ?,u.id,?,?,t.id,?,?,?,?,? FROM users u INNER JOIN types t WHERE u.username=?)",[name,uuid,images?.join(';'),type,cookingTime,difficulty,description,new Date(),author])
+            let stringified:string|null=null;
+            if(images!=null)stringified=images.join(';')
+            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO recipes(name,authorID,uuid,images,typeID,cookingTime,difficulty,description,uploadTime) SELECT ?,u.id,?,?,t.id,?,?,?,? FROM users u INNER JOIN types t ON t.name=? WHERE u.username=?",[name,uuid,stringified,cookingTime,difficulty,description,new Date(),type,author])
             if(data.affectedRows==0){
                 await conn.rollback();
-                throw "User or Type does not exist"
+                return Promise.reject("User or Type does not exist")
             }
             await conn.commit();
         }
         catch(e){
+            console.log(e);
             await conn.rollback();
             throw "Could not complete create"
         }
@@ -63,12 +66,13 @@ export class RecipeAPI{
 
             if(data.affectedRows==0){
                 await conn.rollback();
-                throw "Recipe does not exist"
+                return Promise.reject("Recipe does not exist")
             }
 
             await conn.commit();
         }
         catch(e){
+            console.log(e);
             await conn.rollback();
             throw "Could not remove recipe"
         }
@@ -80,7 +84,7 @@ export class RecipeAPI{
             let [data]=await conn.execute<ResultSetHeader>("INSERT INTO reviews(recipeID,userID,rating,comment,uploadTime) SELECT r.id,u.id,?,?,? FROM recipes r INNER JOIN users u WHERE u.username=? AND r.uuid=?",[rating,comment,new Date(),rater,uuid])
             if(data.affectedRows==0){
                 await conn.rollback();
-                throw "Recipe or User does not exist"
+                return Promise.reject("Recipe or User does not exist")
             }
             await conn.commit();
         }
@@ -104,13 +108,14 @@ export class RecipeAPI{
         interface recipe extends RowDataPacket, InstanceType<typeof Recipe>{}
         
         try{
-            let [res]=await conn.query<recipe[]>("SELECT r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime,r.difficulty,r.description,r.uploadTime FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID INNER JOIN reviews rev ON rev.recipeID=r.id WHERE r.uuid=?",[uuid]);
+            let [res]=await conn.query<recipe[]>("SELECT r.uuid,r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime as cookTime,r.difficulty,r.description,r.uploadTime as time FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID LEFT JOIN reviews rev ON rev.recipeID=r.id WHERE r.uuid=? GROUP BY r.id, r.name, r.images, u.username, t.name, r.cookingTime, r.difficulty, r.description, r.uploadTime ",[uuid]);
             if(res.length==0){
-                throw "Recipe does not exist"
+                return Promise.reject("Recipe does not exist")
             }
             return res[0];
         }
         catch(e){
+            console.log(e);
             throw "Could not fetch recipe"
         }
 
@@ -118,7 +123,7 @@ export class RecipeAPI{
     static async get_all_recipes(conn:mysql.Connection):Promise<Recipe[]>{
         interface recipe extends RowDataPacket, InstanceType<typeof Recipe>{}
         try{
-            let [res]=await conn.query<recipe[]>("SELECT r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime,r.difficulty,r.description,r.uploadTime FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID INNER JOIN reviews rev ON rev.recipeID=r.id");
+            let [res]=await conn.query<recipe[]>("SELECT r.uuid,r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime as cookTime,r.difficulty,r.description,r.uploadTime as time FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID LEFT JOIN reviews rev ON rev.recipeID=r.id GROUP BY r.id, r.name, r.images, u.username, t.name, r.cookingTime, r.difficulty, r.description, r.uploadTime");
             return res;
         }
         catch(e){
@@ -179,7 +184,7 @@ export class PrivateListAPI{
     static async get_list(conn:mysql.Connection,user:string):Promise<Recipe[]>{
         interface recipe extends RowDataPacket, InstanceType<typeof Recipe>{}
         try{
-            let [res]=await conn.query<recipe[]>("SELECT r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime,r.difficulty,r.description,r.uploadTime FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID INNER JOIN reviews rev ON rev.recipeID=r.id WHERE u.username=?",[user]);
+            let [res]=await conn.query<recipe[]>("SELECT r.uuid,r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime as cookTime,r.difficulty,r.description,r.uploadTime as time FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID LEFT JOIN reviews rev ON rev.recipeID=r.id WHERE u.username=? GROUP BY r.id, r.name, r.images, u.username, t.name, r.cookingTime, r.difficulty, r.description, r.uploadTime ",[user]);
             return res;
         }
         catch(e){

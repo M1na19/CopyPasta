@@ -1,4 +1,3 @@
-import { pool } from "./db"
 import mysql, { ResultSetHeader, RowDataPacket } from "mysql2/promise"
 import bcrypt from 'bcrypt';
 export enum TokenPurpose{
@@ -21,16 +20,25 @@ function get_exp_days(tp:TokenPurpose):number{
 }
 
 export class User{
-    username!:string
-    name!:string
-    image!:string
-    email:string|undefined
-    telephone:string|undefined
-    description!:string
-    time!:Date
+    username:string
+    name:string|null
+    image:string|null
+    email:string|null
+    telephone:string|null
+    description:string|null
+    time:Date
+    constructor(un:string,nm:string|null,img:string|null,email:string|null,tlph:string|null,desc:string|null,t:Date){
+        this.username=un;
+        this.name=nm;
+        this.image=img;
+        this.email=email;
+        this.telephone=tlph;
+        this.description=desc;
+        this.time=t;
+    }
 }
 export class UserAPI{
-    static async sign_up(conn:mysql.Connection,username:string, name:string, image:string, password:string, email:string|undefined, description:string, tel:string|undefined):Promise<void>{
+    static async sign_up(conn:mysql.Connection,username:string, name:string|null, image:string|null, password:string, email:string|null, description:string|null, tel:string|null):Promise<void>{
         await conn.beginTransaction();
         try{
             let salt=await bcrypt.genSalt(10);
@@ -48,7 +56,7 @@ export class UserAPI{
         try{
             let [res]=await conn.query<hashed[]>("SELECT password FROM users WHERE username=?",[username])
             if(res.length==0){
-                throw "No user with this name"
+                return Promise.reject("No user with this name")
             }
 
             let hash=res[0].password;
@@ -68,7 +76,7 @@ export class UserAPI{
             let [data]=await conn.execute<ResultSetHeader>("UPDATE users SET password=? WHERE username=?",[hashed,user]);
             if(data.affectedRows==0){
                 await conn.rollback();
-                throw "Could not find user";
+                return Promise.reject("Could not find user")
             }
 
             await conn.commit();
@@ -84,7 +92,7 @@ export class UserAPI{
         try{
             let [res]=await conn.query<user[]>("SELECT username,name,image,email,telephone,description,uploadTime as time FROM users WHERE username=?",[username])
             if(res.length==0){
-                throw "Could not find user";
+                return Promise.reject("Could not find user")
             }
             return res[0] as User;
         }catch(e){
@@ -138,7 +146,7 @@ export class TokenAPI{
             let [data]=await conn.execute<ResultSetHeader>("INSERT INTO authTokens(value,expiration,userID,purpose) SELECT ?,?,u.id,? FROM users u WHERE u.username=?",[rnd,exp,purpose,username]);
             if(data.affectedRows==0){
                 await conn.rollback();
-                throw "Could not find user";
+                return Promise.reject("Could not find user")
             }
             await conn.commit();
 
@@ -153,7 +161,7 @@ export class TokenAPI{
         try{
             let [res]=await conn.query<token[]>("SELECT value,expiration,u.username,purpose FROM authTokens at INNER JOIN users u ON u.id=at.userID WHERE value=? AND purpose=?",[at,purpose])
             if(res.length==0 || res[0].expiration<new Date()){
-                throw "Invalid token"
+                return Promise.reject("Invalid token")
             }else{
                 return res[0].username;
             }

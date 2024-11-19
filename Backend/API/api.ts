@@ -4,6 +4,7 @@ import { body, query } from "express-validator";
 import { RecipeAPI } from "../DB/recipes";
 import { pool } from "../DB/db";
 import { randomUUID } from "crypto";
+import { UserAPI } from "../DB/user";
 
 dotenv.config({
     path: "./API/.api.env"
@@ -11,11 +12,11 @@ dotenv.config({
 
 const app:Express=express();
 const port=process.env.PORT || 3000;
-app.get("/recipes",get_all_recipies);
+app.get("/recipes");
 app.get("/reviews",
     query('recipe').notEmpty().isAlphanumeric().isLength({min:4,max:255}),
     query('author').notEmpty().isAlphanumeric().isLength({min:4,max:255}),
-    get_reviews
+
 );
 app.post("/post_recipe",
     body("name").notEmpty().isAlphanumeric().isLength({min:4,max:255}),
@@ -39,6 +40,3 @@ app.post("/sign_up",
 app.listen(port, () => {
     console.log(`[server]: Server is running at http://localhost:${port}`);
 });
-pool.getConnection().then(conn=>{
-    RecipeAPI.remove_recipe(conn,randomUUID())
-})
