@@ -1,14 +1,13 @@
-import { pool } from "./db";
-import { UserAPI } from "./user";
+
 import mysql, { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
-import bcrypt from 'bcrypt'
+
 import { UUID } from "crypto";
 export class Review{
     author:string
     rating:number
-    comment:string
+    comment:string|null
     time:Date
-    constructor(ath:string,rtg:number,comment:string,time:Date){
+    constructor(ath:string,rtg:number,comment:string|null,time:Date){
         this.author=ath;
         this.rating=rtg;
         this.comment=comment;
@@ -19,14 +18,14 @@ export class Recipe{
     guid:number
     name:string
     author:string
-    images:string[]
+    images:string[]|null
     rating:number|null
-    type:string
-    cookTime:number
-    difficulty:number
-    description:string
+    type:string|null
+    cookTime:number|null
+    difficulty:number|null
+    description:string|null
     time:Date
-    constructor(gid:number,nm:string,ath:string,imgs:string[],rtg:number|null,typ:string,cT:number,diff:number,desc:string,tm:Date){
+    constructor(gid:number,nm:string,ath:string,imgs:string[]|null,rtg:number|null,typ:string|null,cT:number|null,diff:number|null,desc:string|null,tm:Date){
         this.guid=gid;
         this.name=nm;
         this.author=ath;
@@ -40,14 +39,14 @@ export class Recipe{
     }
 }
 export class RecipeAPI{
-    static async create_recipe(conn:mysql.Connection,name:string,author:string,images:string[],type:number,cookingTime:number,difficulty:number,description:string):Promise<void>{
+    static async create_recipe(conn:mysql.Connection,name:string,author:string,images:string[]|null,type:string|null,cookingTime:number|null,difficulty:number|null,description:string|null):Promise<void>{
         await conn.beginTransaction();
         try{
             let uuid=crypto.randomUUID()
-            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO recipes(name,authorID,uuid,images,typeID,cookingTime,difficulty,description,uploadTime) SELECT ?,u.id,?,?,?,?,?,?,?,? FROM users u WHERE username=?)",[name,uuid,images.join(';'),type,cookingTime,difficulty,description,new Date(),author])
+            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO recipes(name,authorID,uuid,images,typeID,cookingTime,difficulty,description,uploadTime) SELECT ?,u.id,?,?,t.id,?,?,?,?,? FROM users u INNER JOIN types t WHERE u.username=?)",[name,uuid,images?.join(';'),type,cookingTime,difficulty,description,new Date(),author])
             if(data.affectedRows==0){
                 await conn.rollback();
-                throw "User does not exist"
+                throw "User or Type does not exist"
             }
             await conn.commit();
         }
@@ -75,10 +74,10 @@ export class RecipeAPI{
         }
     }
 
-    static async rate_recipe(conn:mysql.Connection,uuid:UUID,rater:string,rating:number,comment:string):Promise<void>{
+    static async rate_recipe(conn:mysql.Connection,uuid:UUID,rater:string,rating:number,comment:string|null):Promise<void>{
         await conn.beginTransaction();
         try{
-            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO reviews(recipeID,userID,rating,comment,uploadTime) SELECT r.id,u.id,?,?,? FROM recipes r INNER JOIN users u WHERE u.username=? AND r.uuid=?",[uuid,rater,rating,comment,new Date()])
+            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO reviews(recipeID,userID,rating,comment,uploadTime) SELECT r.id,u.id,?,?,? FROM recipes r INNER JOIN users u WHERE u.username=? AND r.uuid=?",[rating,comment,new Date(),rater,uuid])
             if(data.affectedRows==0){
                 await conn.rollback();
                 throw "Recipe or User does not exist"
@@ -177,7 +176,14 @@ export class PrivateListAPI{
             throw "Could not add recipe to list"
         }
     }
-    static async get_list(userID:number):Promise<Recipe[]>{
-        throw "Reject"
+    static async get_list(conn:mysql.Connection,user:string):Promise<Recipe[]>{
+        interface recipe extends RowDataPacket, InstanceType<typeof Recipe>{}
+        try{
+            let [res]=await conn.query<recipe[]>("SELECT r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime,r.difficulty,r.description,r.uploadTime FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID INNER JOIN reviews rev ON rev.recipeID=r.id WHERE u.username=?",[user]);
+            return res;
+        }
+        catch(e){
+            throw "Could not get list"
+        }
     }
 }

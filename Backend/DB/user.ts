@@ -1,5 +1,5 @@
 import { pool } from "./db"
-import mysql, { RowDataPacket } from "mysql2/promise"
+import mysql, { ResultSetHeader, RowDataPacket } from "mysql2/promise"
 import bcrypt from 'bcrypt';
 export enum TokenPurpose{
     RefreshToken=0,
@@ -19,116 +19,75 @@ function get_exp_days(tp:TokenPurpose):number{
         }
     }
 }
+
 export class User{
-    username!:String
-    name!:String
-    image!:String
-    email:String|undefined
-    telephone:String|undefined
-    description!:String
+    username!:string
+    name!:string
+    image!:string
+    email:string|undefined
+    telephone:string|undefined
+    description!:string
     time!:Date
 }
 export class UserAPI{
-    static async get_user_id(conn:mysql.Connection,username:String):Promise<Number|null>{
-        interface id extends RowDataPacket{id:number}
-        try{
-            let [res]=await conn.query<id[]>("SELECT id FROM users WHERE username=?",[username])
-            if(res.length==0){
-                return null;
-            }else{
-                return res[0].id;
-            }
-        }catch(e){
-            throw "Could not fetch db idx";
-        }
-    }
-    static async get_username(conn:mysql.Connection,userID:Number):Promise<String|null>{
-        interface username extends RowDataPacket{username:String}
-        try{
-            let [res]=await conn.query<username[]>("SELECT username FROM users WHERE id=?",[userID])
-            if(res.length==0){
-                return null;
-            }else{
-                return res[0].username;
-            }
-        }catch(e){
-            throw "Could not fetch db idx";
-        }
-    }
-    static async sign_up(username:String, name:String, image:String, password:String, email:String|undefined, description:String, tel:String|undefined):Promise<void>{
-        let conn=await pool.getConnection();
-        await conn.beginTransaction();
-        let id=await this.get_user_id(conn,username);
-        
-        if(typeof(id)=="number"){
-            return Promise.reject("A user with the same username already exists");
-        }
-        let salt=await bcrypt.genSalt(10);
-        let hashed=await bcrypt.hash(password.toString(),salt);
-        try{
-            await conn.execute("INSERT INTO users(username,name,image,password,email,description,telephone,uploadTime) VALUES(?,?,?,?,?,?,?,?)",[username,name,image,hashed,email,description,tel,new Date()]);
-            await conn.commit();
-            conn.release();
-        }catch(e){
-            await conn.rollback();
-            conn.release();
-            return Promise.reject("Could not complete create")
-        }
-    }
-    static async log_in(userID:Number, password:String):Promise<Boolean>{
-        let conn=await pool.getConnection();
-        await conn.beginTransaction();
-        interface hashed extends RowDataPacket{password:string}
-        try{
-            let [res]=await conn.query<hashed[]>("SELECT password FROM users WHERE id=?",[userID])
-            if(res.length==0){
-                await conn.rollback();
-                conn.release();
-                throw "DB Error"
-            }else{
-                let hash=res[0].password;
-                let success=await bcrypt.compare(password.toString(),hash);
-                await conn.commit();
-                conn.release();
-                return success;
-            }
-            
-        }catch(e){
-            await conn.rollback();
-            conn.release();
-            throw "Could not log in";
-        }
-    }
-    static async change_password(userID:Number,new_password:String):Promise<void>{
-        let conn=await pool.getConnection();
+    static async sign_up(conn:mysql.Connection,username:string, name:string, image:string, password:string, email:string|undefined, description:string, tel:string|undefined):Promise<void>{
         await conn.beginTransaction();
         try{
             let salt=await bcrypt.genSalt(10);
-            let hashed=await bcrypt.hash(new_password.toString(),salt);
-            await conn.execute("UPDATE users SET password=? WHERE id=?",[hashed,userID]);
+            let hashed=await bcrypt.hash(password,salt);
+        
+            await conn.execute("INSERT INTO users(username,name,image,password,email,description,telephone,uploadTime) VALUES(?,?,?,?,?,?,?,?)",[username,name,image,hashed,email,description,tel,new Date()]);
             await conn.commit();
-            conn.release();
         }catch(e){
             await conn.rollback();
-            conn.release();
+            throw "Could not complete create"
+        }
+    }
+    static async log_in(conn:mysql.Connection,username:string, password:string):Promise<boolean>{
+        interface hashed extends RowDataPacket{password:string}
+        try{
+            let [res]=await conn.query<hashed[]>("SELECT password FROM users WHERE username=?",[username])
+            if(res.length==0){
+                throw "No user with this name"
+            }
+
+            let hash=res[0].password;
+            let success=await bcrypt.compare(password,hash);
+            return success;
+            
+        }catch(e){
             throw "Could not log in";
         }
     }
-    static async get_data(userID:Number):Promise<User>{
-        let conn=await pool.getConnection();
+    static async change_password(conn:mysql.Connection,user:string,new_password:string):Promise<void>{
         await conn.beginTransaction();
+        try{
+            let salt=await bcrypt.genSalt(10);
+            let hashed=await bcrypt.hash(new_password,salt);
 
+            let [data]=await conn.execute<ResultSetHeader>("UPDATE users SET password=? WHERE username=?",[hashed,user]);
+            if(data.affectedRows==0){
+                await conn.rollback();
+                throw "Could not find user";
+            }
+
+            await conn.commit();
+        }catch(e){
+            await conn.rollback();
+            throw "Could not change password";
+        }
+    }
+    static async get_data(conn:mysql.Connection,username:string):Promise<User>{
         type UserInterface = InstanceType<typeof User>;
         interface user extends RowDataPacket,UserInterface{}
 
         try{
-            let [res]=await conn.query<user[]>("SELECT username,name,image,email,telephone,description,uploadTime as time FROM users WHERE id=?",[userID])
-            await conn.commit();
-            conn.release();
+            let [res]=await conn.query<user[]>("SELECT username,name,image,email,telephone,description,uploadTime as time FROM users WHERE username=?",[username])
+            if(res.length==0){
+                throw "Could not find user";
+            }
             return res[0] as User;
         }catch(e){
-            await conn.rollback();
-            conn.release();
             throw "Could not get user data";
         }
     }
@@ -136,8 +95,9 @@ export class UserAPI{
 export class TokenAPI{
     static access_expiration:number=2;
     static secret:string=process.env.SECRET as string
+
     //Returns username if successfull
-    static async issue_access_token(at:String):Promise<String | null>{
+    static async issue_access_token(at:string):Promise<string | null>{
         let exp=new Date();
         exp.setHours(exp.getHours()+this.access_expiration);
         let header=Buffer.from(JSON.stringify({
@@ -155,7 +115,7 @@ export class TokenAPI{
         return header+'.'+payload+'.'+secret;
     }
     //Return userID on success
-    static async verify_access_token(at:String):Promise<String | null>{
+    static async verify_access_token(at:string):Promise<string | null>{
         let parts=at.split('.');
         if(parts.length!=3 && !await bcrypt.compare(parts[0]+parts[1]+this.secret,Buffer.from(parts[2],'base64').toString())){
             return null;
@@ -167,42 +127,38 @@ export class TokenAPI{
         }
         return payload.username;
     }
-    static async issue_auth_token(userID:Number,purpose:TokenPurpose):Promise<String>{
-        let conn=await pool.getConnection();
+
+    static async issue_auth_token(conn:mysql.Connection,username:string,purpose:TokenPurpose):Promise<string>{
         await conn.beginTransaction();
         try{
             let rnd=await bcrypt.genSalt(10);
             let exp=new Date();
             exp.setDate(exp.getDate()+get_exp_days(purpose));
-            await conn.execute("INSERT INTO authTokens(value,expiration,userID,purpose) VALUES(?,?,?,?)",[rnd,exp,userID,purpose]);
+
+            let [data]=await conn.execute<ResultSetHeader>("INSERT INTO authTokens(value,expiration,userID,purpose) SELECT ?,?,u.id,? FROM users u WHERE u.username=?",[rnd,exp,purpose,username]);
+            if(data.affectedRows==0){
+                await conn.rollback();
+                throw "Could not find user";
+            }
             await conn.commit();
-            conn.release();
+
             return rnd;
         }catch(e){
             await conn.rollback();
-            conn.release();
             throw "Could not issue token";
         }
     }
-    static async verify_auth_token(at:String,purpose:TokenPurpose):Promise<Number>{
-        let conn=await pool.getConnection();
-        await conn.beginTransaction();
-        interface token extends RowDataPacket{expiration:Date,userID:number,purpose:TokenPurpose};
+    static async verify_auth_token(conn:mysql.Connection,at:string,purpose:TokenPurpose):Promise<string>{
+        interface token extends RowDataPacket{expiration:Date,username:string,purpose:TokenPurpose};
         try{
-            let [res]=await conn.query<token[]>("SELECT value,expiration,userID,purpose FROM authTokens WHERE value=? AND purpose=?",[at,purpose])
+            let [res]=await conn.query<token[]>("SELECT value,expiration,u.username,purpose FROM authTokens at INNER JOIN users u ON u.id=at.userID WHERE value=? AND purpose=?",[at,purpose])
             if(res.length==0 || res[0].expiration<new Date()){
-                await conn.rollback();
-                conn.release();
                 throw "Invalid token"
             }else{
-                await conn.commit();
-                conn.release();
-                return res[0].userID;
+                return res[0].username;
             }
             
         }catch(e){
-            await conn.rollback();
-            conn.release();
             throw "Could not verify token";
         }
     }
