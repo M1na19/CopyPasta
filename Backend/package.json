@@ -17,20 +17,22 @@
   "homepage": "https://github.com/M1na19/CopyPasta#readme",
   "description": "",
   "dependencies": {
+    "@prisma/client": "^5.22.0",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
     "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
-    "express-validator": "^7.2.0",
-    "mysql2": "^3.11.4"
+    "express-validator": "^7.2.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.7",
     "@types/crypto-js": "^4.2.2",
     "@types/express": "^5.0.0",
-    "@types/node": "^22.9.0",
+    "@types/node": "^22.9.1",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }
 }

@@ -3,13 +3,17 @@ import dotenv from "dotenv";
 import { body, check, cookie, ExpressValidator, param, query } from "express-validator";
 import { add_favorite, add_type, get_all_recipes, get_all_reviews, get_list, get_recipe, get_types, post_recipe, rate_recipe, remove_favorite, remove_recipe } from "./src/recipes";
 import { CustomValidation } from "express-validator/lib/context-items";
-import { TokenAPI } from "../DB/user";
+import { TokenAPI } from "./src/users";
 import { change_password, get_user_data, log_in, refresh, remove_account, request_activation, request_password_change, request_sign_up } from "./src/users";
 import cookieParser from 'cookie-parser'
+import { PrismaClient } from '@prisma/client'
 
 dotenv.config({
-    path: "./API/.api.env"
+    path: "./.env"
 })
+
+
+export const prisma=new PrismaClient();
 
 const app:Express=express();
 const port=process.env.PORT || 3000;

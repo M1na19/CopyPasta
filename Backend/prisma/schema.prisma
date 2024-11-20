@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model authTokens {
+  value      String   @unique(map: "authtokens_value_unique") @db.VarChar(255)
+  userID     Int      @db.UnsignedInt
+  id         Int      @id @default(autoincrement()) @db.UnsignedInt
+  expiration DateTime @db.Timestamp(0)
+  purpose    TokenPurpose
+  users      users    @relation(fields: [userID], references: [id], onDelete: NoAction, onUpdate: Cascade, map: "authtokens_userid_foreign")
+
+  @@index([userID], map: "authtokens_userid_foreign")
+}
+enum TokenPurpose{
+    REFRESH
+    SIGNUP
+    PASSWORD
+}
+model privateList {
+  userID   Int     @db.UnsignedInt
+  recipeID Int     @db.UnsignedInt
+  id       Int     @id @default(autoincrement()) @db.UnsignedInt
+  recipes  recipes @relation(fields: [recipeID], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "privatelist_recipeid_foreign")
+  users    users   @relation(fields: [userID], references: [id], onDelete: NoAction, onUpdate: Cascade, map: "privatelist_userid_foreign")
+
+  @@unique([recipeID, userID], map: "privatelist_recipeid_userid_unique")
+  @@index([userID], map: "privatelist_userid_foreign")
+}
+
+model recipes {
+  images      String?       @db.VarChar(255)
+  typeID      Int?          @db.UnsignedInt
+  description String?       @db.Text
+  uploadTime  DateTime      @db.Timestamp(0) @default(now())
+  authorID    Int           @db.UnsignedInt
+  cookingTime Int?
+  name        String        @db.VarChar(255)
+  id          Int           @id @default(autoincrement()) @db.UnsignedInt
+  difficulty  Int?
+  uuid        String        @unique(map: "recipes_uuid_unique") @db.Char(36)
+  privateList privateList[]
+  users       users         @relation(fields: [authorID], references: [id], onDelete: NoAction, onUpdate: Cascade, map: "recipes_authorid_foreign")
+  types       types?        @relation(fields: [typeID], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "recipes_typeid_foreign")
+  reviews     reviews[]
+
+  @@index([authorID], map: "recipes_authorid_foreign")
+  @@index([typeID], map: "recipes_typeid_foreign")
+}
+
+model reviews {
+  userID     Int      @db.UnsignedInt
+  recipeID   Int      @db.UnsignedInt
+  id         Int      @id @default(autoincrement()) @db.UnsignedInt
+  rating     Float
+  comment    String?  @db.Text
+  uploadTime DateTime @db.Timestamp(0)@default(now())
+  recipes    recipes  @relation(fields: [recipeID], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "reviews_recipeid_foreign")
+  users      users    @relation(fields: [userID], references: [id], onDelete: NoAction, onUpdate: Cascade, map: "reviews_userid_foreign")
+
+  @@unique([recipeID, userID], map: "reviews_recipeid_userid_unique")
+  @@index([userID], map: "reviews_userid_foreign")
+}
+
+model types {
+  id      Int       @id @default(autoincrement()) @db.UnsignedInt
+  name    String    @unique(map: "types_name_unique") @db.VarChar(255)
+  recipes recipes[]
+}
+
+model users {
+  password    String        @unique(map: "users_password_unique") @db.VarChar(255)
+  image       String?       @unique(map: "users_image_unique") @db.VarChar(255)
+  id          Int           @id @default(autoincrement()) @db.UnsignedInt
+  description String?       @db.Text
+  name        String?       @db.VarChar(255)
+  email       String?       @unique(map: "users_email_unique") @db.VarChar(255)
+  active      Boolean       @default(false)
+  telephone   String?       @unique(map: "users_telephone_unique") @db.VarChar(255)
+  uploadTime  DateTime      @db.Timestamp(0)@default(now())
+  username    String        @unique(map: "users_username_unique") @db.VarChar(255)
+  authTokens  authTokens[]
+  privateList privateList[]
+  recipes     recipes[]
+  reviews     reviews[]
+}
