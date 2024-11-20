@@ -1,11 +1,12 @@
 import mysql, { ResultSetHeader, RowDataPacket } from "mysql2/promise"
 import bcrypt from 'bcrypt';
+import crypto from 'crypto'
 export enum TokenPurpose{
     RefreshToken=0,
     VerifySignUp=1,
     ChangePassword=2,
 }
-function get_exp_days(tp:TokenPurpose):number{
+export function get_exp_days(tp:TokenPurpose):number{
     switch (tp){
         case TokenPurpose.RefreshToken:{
             return 28;
@@ -39,42 +40,39 @@ export class User{
 }
 export class UserAPI{
     static async sign_up(conn:mysql.Connection,username:string, name:string|null, image:string|null, password:string, email:string|null, description:string|null, tel:string|null):Promise<void>{
-        await conn.beginTransaction();
+        
         try{
             let salt=await bcrypt.genSalt(10);
             let hashed=await bcrypt.hash(password,salt);
         
             await conn.execute("INSERT INTO users(username,name,image,password,email,description,telephone,uploadTime,active) VALUES(?,?,?,?,?,?,?,?,false)",[username,name,image,hashed,email,description,tel,new Date()]);
-            await conn.commit();
+            
         }catch(e){
-            await conn.rollback();
             throw {message:"Could not complete create",status:500}
         }
     }
     static async activate_account(conn:mysql.Connection,username:string){
-        await conn.beginTransaction();
+        
         try{
-            let [data]=await conn.execute<ResultSetHeader>("UPDATE users SET active=true WHERE username=?");
+            let [data]=await conn.execute<ResultSetHeader>("UPDATE users SET active=true WHERE username=?",[username]);
             if(data.affectedRows==0){
                 return Promise.reject({message:"No user with this name",status:400})
             }
-            await conn.commit();
+            
         }catch(e){
-            await conn.rollback();
             throw {message:"Could not complete activation",status:500}
         }
     }
     static async delete_account(conn:mysql.Connection,username:string){
-        await conn.beginTransaction();
+        
         try{
-            let [data]=await conn.execute<ResultSetHeader>("UPDATE users SET active=false WHERE username=?");
+            let [data]=await conn.execute<ResultSetHeader>("UPDATE users SET active=false WHERE username=?",[username]);
             if(data.affectedRows==0){
                 return Promise.reject({message:"No user with this name",status:400})
             }
-            await conn.commit();
+            
         }catch(e){
-            await conn.rollback();
-            throw {message:"Could not complete activation",status:500}
+            throw {message:"Could not complete delete",status:500}
         }
     }
     static async log_in(conn:mysql.Connection,username:string, password:string):Promise<boolean>{
@@ -94,7 +92,7 @@ export class UserAPI{
         }
     }
     static async change_password(conn:mysql.Connection,user:string,new_password:string):Promise<void>{
-        await conn.beginTransaction();
+        
         try{
             let salt=await bcrypt.genSalt(10);
             let hashed=await bcrypt.hash(new_password,salt);
@@ -105,7 +103,7 @@ export class UserAPI{
                 return Promise.reject({message:"Could not find user",status:400})
             }
 
-            await conn.commit();
+            
         }catch(e){
             await conn.rollback();
             throw {message:"Could not change password",status:500}
@@ -131,7 +129,7 @@ export class TokenAPI{
     static secret:string=process.env.SECRET as string
 
     //Returns username if successfull
-    static async issue_access_token(at:string):Promise<string | null>{
+    static async issue_access_token(username:string):Promise<string | null>{
         let exp=new Date();
         exp.setHours(exp.getHours()+this.access_expiration);
         let header=Buffer.from(JSON.stringify({
@@ -139,7 +137,7 @@ export class TokenAPI{
             typ:"JWT"
         })).toString('base64');
         let payload=Buffer.from(JSON.stringify({
-            username:at,
+            username:username,
             expiration:exp
         })).toString('base64');
 
@@ -163,9 +161,9 @@ export class TokenAPI{
     }
 
     static async issue_auth_token(conn:mysql.Connection,username:string,purpose:TokenPurpose):Promise<string>{
-        await conn.beginTransaction();
+        
         try{
-            let rnd=await bcrypt.genSalt(10);
+            let rnd=crypto.randomBytes(64).toString('hex');
             let exp=new Date();
             exp.setDate(exp.getDate()+get_exp_days(purpose));
 
@@ -174,11 +172,10 @@ export class TokenAPI{
                 await conn.rollback();
                 return Promise.reject({message:"Could not find user",status:400})
             }
-            await conn.commit();
+            
 
             return rnd;
         }catch(e){
-            await conn.rollback();
             throw {message:"Could not issue token",status:500};
         }
     }
@@ -196,5 +193,15 @@ export class TokenAPI{
             throw {message:"Could not verify token",status:500}
         }
     }
-   
+    static async delete_auth_token(conn:mysql.Connection,username:string,purpose:TokenPurpose){
+        try{
+            let [data]=await conn.execute<ResultSetHeader>("DELETE at FROM authTokens at INNER JOIN users u ON u.id=at.userID WHERE u.username=? AND at.purpose=?",[username,purpose]);
+            if(data.affectedRows==0){
+                return Promise.reject({message:"No token with this signature",status:400})
+            }
+            
+        }catch(e){
+            throw {message:"Could not complete deletion",status:500}
+        }
+    }
 }

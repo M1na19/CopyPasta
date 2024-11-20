@@ -40,7 +40,7 @@ export class Recipe{
 }
 export class RecipeAPI{
     static async create_recipe(conn:mysql.Connection,name:string,author:string,images:string[]|null,type:string,cookingTime:number|null,difficulty:number|null,description:string|null):Promise<void>{
-        await conn.beginTransaction();
+        
         try{
             let uuid=crypto.randomUUID()
             let stringified:string|null=null;
@@ -50,7 +50,7 @@ export class RecipeAPI{
                 await conn.rollback();
                 return Promise.reject({message:"User or Type does not exist",status:400})
             }
-            await conn.commit();
+            
         }
         catch(e){
             console.log(e);
@@ -59,8 +59,9 @@ export class RecipeAPI{
         }
     }
     static async remove_recipe(conn:mysql.Connection,uuid:UUID):Promise<void>{
-        await conn.beginTransaction();
+        
         try{
+            await conn.execute("DELETE l FROM privateList l INNER JOIN recipes rec ON l.recipeID=rec.id WHERE rec.uuid=?",[uuid])
             await conn.execute("DELETE rev FROM reviews rev INNER JOIN recipes rec ON rev.recipeID=rec.id WHERE rec.uuid=?",[uuid])
             let [data]=await conn.execute<ResultSetHeader>("DELETE FROM recipes WHERE uuid=?",[uuid])
 
@@ -69,7 +70,7 @@ export class RecipeAPI{
                 return Promise.reject({message:"Recipe does not exist",status:400})
             }
 
-            await conn.commit();
+            
         }
         catch(e){
             console.log(e);
@@ -79,14 +80,14 @@ export class RecipeAPI{
     }
 
     static async rate_recipe(conn:mysql.Connection,uuid:UUID,rater:string,rating:number,comment:string|null):Promise<void>{
-        await conn.beginTransaction();
+        
         try{
             let [data]=await conn.execute<ResultSetHeader>("INSERT INTO reviews(recipeID,userID,rating,comment,uploadTime) SELECT r.id,u.id,?,?,? FROM recipes r INNER JOIN users u WHERE u.username=? AND r.uuid=?",[rating,comment,new Date(),rater,uuid])
             if(data.affectedRows==0){
                 await conn.rollback();
                 return Promise.reject({message:"Recipe or User does not exist",status:400})
             }
-            await conn.commit();
+            
         }
         catch(e){
             await conn.rollback();
@@ -132,11 +133,8 @@ export class RecipeAPI{
 
     }
     static async add_type(conn:mysql.Connection,type:string):Promise<void>{
-        await conn.beginTransaction();
-        
         try{
             await conn.execute("INSERT INTO types(name) VALUES(?)",[type])
-            await conn.commit();
         }
         catch(e){
             await conn.rollback();
@@ -160,31 +158,28 @@ export class RecipeAPI{
 }
 export class PrivateListAPI{
     static async add_to_list(conn:mysql.Connection,uuid:UUID,user:string):Promise<void>{
-        await conn.beginTransaction();
+        
         try{
-            await conn.execute("INSERT INTO privateList(recipeID,userID) SELECT r.id,u.id FROM recipes r INNER JOIN user u WHERE r.uuid=? AND u.username=?",[uuid,user])
-            await conn.commit();
+            await conn.execute("INSERT INTO privateList(recipeID,userID) SELECT r.id,u.id FROM recipes r INNER JOIN users u ON u.username=? WHERE r.uuid=?",[user,uuid])
         }
         catch(e){
-            await conn.rollback();
             throw {message:"Could not add recipe to list",status:500}
         }
     }
     static async remove_from_list(conn:mysql.Connection,uuid:UUID,user:string):Promise<void>{
-        await conn.beginTransaction();
+        
         try{
-            await conn.execute("DELETE FROM privateList pl INNER JOIN user u ON pl.userID=u.id INNER JOIN recipes r ON r.id=pl.recipeID WHERE r.uuid=? AND u.username=?",[uuid,user]);
-            await conn.commit();
+            await conn.execute("DELETE pl FROM privateList pl INNER JOIN users u ON pl.userID=u.id INNER JOIN recipes r ON r.id=pl.recipeID WHERE r.uuid=? AND u.username=?",[uuid,user]);
+            
         }
         catch(e){
-            await conn.rollback();
-            throw {message:"Could not add recipe to list",status:500}
+            throw {message:"Could not remove recipe to list",status:500}
         }
     }
     static async get_list(conn:mysql.Connection,user:string):Promise<Recipe[]>{
         interface recipe extends RowDataPacket, InstanceType<typeof Recipe>{}
         try{
-            let [res]=await conn.query<recipe[]>("SELECT r.uuid,r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime as cookTime,r.difficulty,r.description,r.uploadTime as time FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID LEFT JOIN reviews rev ON rev.recipeID=r.id WHERE u.username=? GROUP BY r.id, r.name, r.images, u.username, t.name, r.cookingTime, r.difficulty, r.description, r.uploadTime ",[user]);
+            let [res]=await conn.query<recipe[]>("SELECT r.uuid,r.name,r.images,AVG(rev.rating) as rating ,u.username as author,t.name as type,r.cookingTime as cookTime,r.difficulty,r.description,r.uploadTime as time FROM recipes r INNER JOIN users u ON r.authorID=u.id INNER JOIN types t ON t.id=r.typeID LEFT JOIN reviews rev ON rev.recipeID=r.id INNER JOIN privateList pl ON u.id=pl.userID WHERE u.username=? GROUP BY r.id, r.name, r.images, u.username, t.name, r.cookingTime, r.difficulty, r.description, r.uploadTime ",[user]);
             return res;
         }
         catch(e){
