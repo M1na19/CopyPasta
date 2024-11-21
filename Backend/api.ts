@@ -7,13 +7,23 @@ import { TokenAPI } from "./src/users";
 import { change_password, get_user_data, log_in, refresh, remove_account, request_activation, request_password_change, request_sign_up } from "./src/users";
 import cookieParser from 'cookie-parser'
 import { PrismaClient } from '@prisma/client'
-
+import nodemailer from 'nodemailer'
 dotenv.config({
     path: "./.env"
 })
 
 
 export const prisma=new PrismaClient();
+export const transporter = nodemailer.createTransport({
+    service: "Gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true, 
+    auth: {
+      user: process.env.MAIL,
+      pass: process.env.MAIL_PASS,
+    },
+  });
 
 const app:Express=express();
 const port=process.env.PORT || 3000;
@@ -44,7 +54,6 @@ async function access_token_validator(req:Request,res:Response,next:NextFunction
 }
 
 
-
 app.get("/recipes",get_all_recipes);
 app.get("/reviews",
     query('uuid').isUUID(),
@@ -66,7 +75,7 @@ app.post("/request_sign_up",
     body("name").optional().isAlpha().isLength({min:1}),
     body("password").isAscii().isLength({min:8,max:255}).isStrongPassword(),
     body("image").optional().isAlphanumeric().isLength({min:1,max:25}),
-    body("email").optional().isEmail({}).isLength({max:255}),
+    body("email").notEmpty().isEmail({}).isLength({max:255}),
     body("telephone").optional().isMobilePhone('any'),
     body("description").optional().isAscii(),
     request_sign_up

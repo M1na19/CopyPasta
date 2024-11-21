@@ -78,7 +78,7 @@ model users {
   id          Int           @id @default(autoincrement()) @db.UnsignedInt
   description String?       @db.Text
   name        String?       @db.VarChar(255)
-  email       String?       @unique(map: "users_email_unique") @db.VarChar(255)
+  email       String       @unique(map: "users_email_unique") @db.VarChar(255)
   active      Boolean       @default(false)
   telephone   String?       @unique(map: "users_telephone_unique") @db.VarChar(255)
   uploadTime  DateTime      @db.Timestamp(0)@default(now())

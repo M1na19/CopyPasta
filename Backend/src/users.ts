@@ -1,10 +1,11 @@
 import { Request, Response } from "express";
-import { prisma } from "../api";
+import { prisma, transporter } from "../api";
 import { hash, UUID } from "crypto";
 import { validationResult } from "express-validator";
 import bcrypt from 'bcrypt';
 import crypto from 'crypto'
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
+import { sendPasswordMail, sendSignUpMail } from "./mail";
 const refresh_token_exp=28;
 const sign_up_pass_exp=1;
 export class TokenAPI{
@@ -51,13 +52,13 @@ export async function request_sign_up(req:Request,res:Response){
     let name=req.body.name || null;
     let password=req.body.password;
     let image=req.body.image || null;
-    let email=req.body.email || null;
+    let email=req.body.email;
     let telephone=req.body.telephone || null
     let description=req.body.description || null;
     try{
         let salt=await bcrypt.genSalt(10);
         let hashed=await bcrypt.hash(password,salt);
-        const token=await prisma.$transaction(async(prisma)=>{
+        await prisma.$transaction(async(prisma)=>{
             await prisma.users.create({
                 data:{
                     username:username,
@@ -71,7 +72,7 @@ export async function request_sign_up(req:Request,res:Response){
             })
             let exp=new Date();
             exp.setDate(exp.getDate()+sign_up_pass_exp);
-            return (await prisma.authTokens.create({
+            const token=(await prisma.authTokens.create({
                 data:{
                     value:crypto.randomBytes(64).toString('hex'),
                     users:{
@@ -86,14 +87,15 @@ export async function request_sign_up(req:Request,res:Response){
                     value:true
                 }
             })).value;
+            await sendSignUpMail(transporter,email,token);
         })
-        console.log(token)
-        //MAIL SERVICE
+        
 
         res.status(200).json({
             "success":true,
         })
     }catch(e:any){
+        console.log(e);
         if(e instanceof PrismaClientKnownRequestError && e.code=="P2002"){
             res.status(403).json({"success":false,"error":"User with the same credentials already exists"})
         }else{
@@ -212,7 +214,11 @@ export async function log_in(req:Request,res:Response){
             })
         }
     }catch(e:any){
-        res.status(500).json({"success":false})
+        if(e instanceof PrismaClientKnownRequestError && e.code=="P2025"){
+            res.status(200).json({"success":false})
+        }else{
+            res.status(500).json({"success":false})
+        }
     }
 
 }
@@ -258,6 +264,14 @@ export async function request_password_change(req:Request,res:Response){
         
         let exp=new Date();
         exp.setDate(exp.getDate()+sign_up_pass_exp);
+        const email=(await prisma.users.findUniqueOrThrow({
+            where:{
+                username:user
+            },
+            select:{
+                email:true
+            }
+        })).email;
         await prisma.authTokens.deleteMany({
             where:{
                 purpose:"PASSWORD",
@@ -281,8 +295,7 @@ export async function request_password_change(req:Request,res:Response){
                 value:true
             }
         })).value;
-        console.log(token)
-        //MAIL SERVICE
+        await sendPasswordMail(transporter,email,token);
 
 
         res.status(200).json({
