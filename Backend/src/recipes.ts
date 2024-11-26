@@ -21,6 +21,7 @@ export async function get_list(req:Request,res:Response){
                         uuid:true,
                         name:true,
                         images:true,
+                        rating:true,
                         users:{
                             select:{
                                 username:true
@@ -77,6 +78,7 @@ export async function get_all_recipes(req:Request,res:Response){
                 uuid:true,
                 name:true,
                 images:true,
+                rating:true,
                 users:{
                     select:{
                         username:true
@@ -116,6 +118,7 @@ export async function get_recipe(req:Request,res:Response){
             select:{
                 uuid:true,
                 name:true,
+                rating:true,
                 images:true,
                 users:{
                     select:{
@@ -218,6 +221,7 @@ export async function post_recipe(req:Request,res:Response){
         if(e instanceof PrismaClientKnownRequestError && e.code=="P2025"){
             res.status(400).json({"success":false,"error":"Input not found in db"})
         }else{
+            console.log(e);
             res.status(500).json({"success":false})
         }
     }
@@ -252,21 +256,39 @@ export async function rate_recipe(req:Request,res:Response){
     let comment=req.body.comment || null;
     let user=res.locals.username;
     try{
-        await prisma.reviews.create({
-            data:{
-                recipes:{
-                    connect:{
+        await prisma.$transaction(async(prisma)=>{
+            await prisma.reviews.create({
+                data:{
+                    recipes:{
+                        connect:{
+                            uuid:uuid
+                        }
+                    },
+                    rating:rating,
+                    comment:comment,
+                    users:{
+                        connect:{
+                            username:user
+                        }
+                    }
+                }            
+            })
+            const avgRating = await prisma.reviews.aggregate({
+                where: {  
+                    recipes:{
                         uuid:uuid
                     }
                 },
-                rating:rating,
-                comment:comment,
-                users:{
-                    connect:{
-                        username:user
-                    }
+                _avg: { rating: true },
+              });
+            await prisma.recipes.update({
+                where:{
+                    uuid:uuid,
+                },
+                data:{
+                    rating:avgRating._avg.rating
                 }
-            }            
+            })
         })
         res.status(200).json({"success":true})
 

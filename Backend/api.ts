@@ -7,6 +7,7 @@ import { TokenAPI } from "./src/users";
 import { change_password, get_user_data, log_in, refresh, remove_account, request_activation, request_password_change, request_sign_up } from "./src/users";
 import cookieParser from 'cookie-parser'
 import { PrismaClient } from '@prisma/client'
+import cors from "cors"
 import nodemailer from 'nodemailer'
 dotenv.config({
     path: "./.env"
@@ -28,6 +29,7 @@ export const transporter = nodemailer.createTransport({
 const app:Express=express();
 const port=process.env.PORT || 3000;
 app.use(express.json())
+app.use(cors())
 app.use(cookieParser(process.env.SECRET))
 
 async function access_token_validator(req:Request,res:Response,next:NextFunction){

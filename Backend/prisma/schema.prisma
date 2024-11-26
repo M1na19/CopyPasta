@@ -39,6 +39,7 @@ model recipes {
   uploadTime  DateTime      @db.Timestamp(0) @default(now())
   authorID    Int           @db.UnsignedInt
   cookingTime Int?
+  rating      Float?
   name        String        @db.VarChar(255)
   id          Int           @id @default(autoincrement()) @db.UnsignedInt
   difficulty  Int?
