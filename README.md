@@ -3,8 +3,10 @@
 - **Baza de date:** MySQL
 - **Backend:** Prisma, Express, NodeMailer, TypeScript
 - **Frontend:** React, Tailwind CSS, TypeScript
-
+  
 ## Mod de utilizare
+- Versiune Node 18.20.5
+- Toate resursele node trebuie instalate
 - Backend-ul trebuie pornit din folderul *Backend* folosind comanda:
   ```bash
   npx ts-node api.ts
