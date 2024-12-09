@@ -1,30 +1,29 @@
-import React, { useState, createRef, useEffect } from "react";
+import React, { useState, createRef, useEffect, RefObject } from "react";
 import { NavbarCopyPasta, Background, Card } from "./modules";
-import Cookies from "js-cookie";
 import { request, Type } from "../requests";
 import { is_logged_in } from "../requests";
 
-class TypesList extends React.Component {
+class TypesList extends React.Component<{
+  inputRef: RefObject<HTMLInputElement>;
+}> {
   state = {
     search: "", // The search input value
     data: [] as Type[], // All data
     render: [] as Type[], // Data to be rendered (filtered data)
   };
 
-  // Create a reference for the search input
-  searchRef = createRef<HTMLInputElement>();
   dropdownRef = createRef<HTMLUListElement>();
   componentDidMount(): void {
     request("http://localhost:8000/get_types", "GET").then((data) => {
       const types: Type[] = data.types;
-      const searchValue = this.searchRef.current?.value || "";
+      const searchValue = this.props.inputRef.current?.value || "";
       const searched = types.filter((type) => type.name.includes(searchValue));
       this.setState({ search: searchValue, data: types, render: searched });
     });
   }
 
   handleSearchChange = () => {
-    const searchValue = this.searchRef.current?.value || "";
+    const searchValue = this.props.inputRef.current?.value || "";
     const searched = this.state.data.filter((type) =>
       type.name.includes(searchValue),
     );
@@ -47,8 +46,8 @@ class TypesList extends React.Component {
         key={idx}
         className="px-10 py-1 text-blue-700 hover:bg-blue-500 hover:text-white rounded-md"
         onClick={() => {
-          if (this.searchRef.current) {
-            this.searchRef.current.value = type.name;
+          if (this.props.inputRef.current) {
+            this.props.inputRef.current.value = type.name;
           }
         }}
       >
@@ -61,7 +60,7 @@ class TypesList extends React.Component {
         {/* Search input */}
         <div className="border-b-2 border-white w-full outline-none bg-transparent">
           <input
-            ref={this.searchRef}
+            ref={this.props.inputRef}
             type="text"
             onFocus={this.openDropDown}
             onChange={this.handleSearchChange}
@@ -84,6 +83,13 @@ class TypesList extends React.Component {
 }
 function Poster() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const nameRef = createRef<HTMLInputElement>();
+  const typeRef = createRef<HTMLInputElement>();
+  const diffRef = createRef<HTMLInputElement>();
+  const timeRef = createRef<HTMLInputElement>();
+  const imageRef = createRef<HTMLInputElement>();
+  const descRef = createRef<HTMLTextAreaElement>();
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   useEffect(() => {
     is_logged_in().then((l) => {
@@ -115,8 +121,18 @@ function Poster() {
             <div className="flex flex-col mt-10 items-center max-sm:space-y-2 space-y-10 max-y-[100px] w-full">
               <div className="flex items-center space-x-4">
                 <input
+                  onChange={() => {
+                    if (imageRef.current?.files) {
+                      const newFiles = Array.from(imageRef.current.files);
+                      setSelectedFiles((prevFiles) => [
+                        ...prevFiles,
+                        ...newFiles,
+                      ]);
+                    }
+                  }}
                   id="file-upload"
                   type="file"
+                  ref={imageRef}
                   className="hidden"
                   multiple
                 ></input>
@@ -129,17 +145,19 @@ function Poster() {
               </div>
               <div className="flex items-center space-x-4 border-b-2 border-white w-full">
                 <input
+                  ref={nameRef}
                   type="text"
                   className="bg-transparent border-transparent outline-none text-white w-full"
                   placeholder="Nume reteta"
                 ></input>
               </div>
               <div className="flex flex-col h-full w-full">
-                <TypesList />
+                <TypesList inputRef={typeRef} />
               </div>
               <div className="flex items-center space-x-4 border-b-2 border-white w-full">
                 <b className="text-white">Dificultate</b>
                 <input
+                  ref={diffRef}
                   type="range"
                   className="bg-transparent border-transparent outline-none text-white w-full"
                 ></input>
@@ -147,19 +165,61 @@ function Poster() {
               <div className="flex items-center space-x-4 border-b-2 border-white w-full">
                 <b className="text-white">Timp(min)</b>
                 <input
+                  ref={timeRef}
                   type="number"
                   className="bg-transparent text-center border-transparent outline-none text-white w-full"
                 ></input>
               </div>
               <div className="flex items-center space-x-4 border-2 rounded-xl border-white w-full max-h-32">
                 <textarea
+                  ref={descRef}
                   className="bg-transparent border-transparent outline-none text-white w-full h-full"
                   placeholder="Descriere"
                 ></textarea>
               </div>
             </div>
 
-            <button className="flex items-center justify-center bg-green-500 mt-[5vw] md:mt-10 mb-10 rounded-2xl">
+            <button
+              className="flex items-center justify-center bg-green-500 mt-[5vw] md:mt-10 mb-10 rounded-2xl"
+              onClick={() => {
+                console.log("jdaksl");
+                const formData = new FormData();
+                if (!(nameRef.current && typeRef.current)) {
+                  console.log(
+                    "Not enough necessary info",
+                    nameRef.current,
+                    typeRef.current,
+                  );
+                  return;
+                }
+                formData.append("name", nameRef.current!.value);
+                formData.append("type", typeRef.current!.value);
+                if (timeRef.current && timeRef.current.value != "") {
+                  formData.append("cookTime", timeRef.current.value);
+                }
+                if (diffRef.current && diffRef.current.value != "") {
+                  formData.append(
+                    "difficulty",
+                    `${parseInt(diffRef.current.value)! / 20}`,
+                  );
+                }
+                if (descRef.current && descRef.current.value.length > 0) {
+                  formData.append("description", descRef.current.value);
+                }
+                if (selectedFiles) {
+                  for (let i = 0; i < selectedFiles.length; i++) {
+                    formData.append("files", selectedFiles[i]);
+                  }
+                }
+                request(
+                  "http://localhost:8000/post_recipe",
+                  "POST",
+                  formData,
+                ).then(() => {
+                  window.location.href = "/";
+                });
+              }}
+            >
               <b className="text-white px-10 py-2">Posteaza</b>
             </button>
           </Card>

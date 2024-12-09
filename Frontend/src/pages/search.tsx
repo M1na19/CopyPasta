@@ -112,9 +112,10 @@ class SearchList extends React.Component {
   render(): React.ReactNode {
     const images: React.ReactNode[] = [];
     this.state.filtered.forEach((rec, idx) => {
-      if (rec.images == null) {
-        rec.images = ["basic.webp"];
+      if (rec.images == null || rec.images[0] == "") {
+        rec.images = ["/images/basic.webp"];
       }
+      console.log(rec.images);
       images.push(
         <React.Fragment key={idx}>
           <button
@@ -135,7 +136,7 @@ class SearchList extends React.Component {
               />
             )}
             <img
-              src={`/images/${rec.images![0]}`}
+              src={`${rec.images![0]}`}
               className="max-w-56 h-56 border-r-green-700 border-2"
             ></img>
             <div className="bg-white max-w-56 h-56 flex flex-col items-center">

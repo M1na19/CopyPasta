@@ -10,7 +10,6 @@ import {
 } from "express-validator";
 import {
   add_favorite,
-  add_type,
   get_all_recipes,
   get_all_reviews,
   get_list,
@@ -37,6 +36,9 @@ import cookieParser from "cookie-parser";
 import { PrismaClient } from "@prisma/client";
 import cors from "cors";
 import nodemailer from "nodemailer";
+import multer from "multer";
+let image_uploads = multer({ dest: "../Frontend/public/upload_images" });
+
 dotenv.config({
   path: "./.env",
 });
@@ -107,34 +109,33 @@ app.get("/reviews", query("uuid").isUUID(), get_all_reviews);
 app.post(
   "/post_recipe",
   access_token_validator,
-  body("name").isAlphanumeric().isLength({ min: 4, max: 255 }),
-  body("images").optional().isArray({ min: 1, max: 10 }),
-  body("images.*").isAlphanumeric().isLength({ min: 1, max: 25 }),
-  body("type").isAlpha().isLength({ max: 255 }),
-  body("cookTime").optional().isInt({ min: 0 }),
-  body("difficulty").optional().isFloat({ min: 0, max: 5 }),
-  body("description").optional().isAscii(),
+  image_uploads.array("files"),
+  check("name").isAscii().isLength({ min: 4, max: 255 }),
+  check("type").isAscii().isLength({ max: 255 }),
+  check("cookTime").optional().isInt({ min: 0 }),
+  check("difficulty").optional().isFloat({ min: 0, max: 5 }),
+  check("description").optional().isAscii(),
   post_recipe,
 );
 app.post(
   "/request_sign_up",
-  body("username").isAlphanumeric().isLength({ min: 4, max: 255 }),
-  body("name").optional().isAlpha().isLength({ min: 1 }),
-  body("password").isAscii().isLength({ min: 8, max: 255 }).isStrongPassword(),
-  body("image").optional().isAlphanumeric().isLength({ min: 1, max: 25 }),
-  body("email").notEmpty().isEmail({}).isLength({ max: 255 }),
-  body("telephone").optional().isMobilePhone("any"),
-  body("description").optional().isAscii(),
+  image_uploads.single("file"),
+  check("username").isAscii().isLength({ min: 4, max: 255 }),
+  check("name").optional().isAlpha().isLength({ min: 1 }),
+  check("password").isAscii().isLength({ min: 8, max: 255 }).isStrongPassword(),
+  check("email").notEmpty().isEmail({}).isLength({ max: 255 }),
+  check("telephone").optional().isMobilePhone("any"),
+  check("description").optional().isAscii(),
   request_sign_up,
 );
-app.post(
+app.get(
   "/activate_account/:token",
   param("token").isAscii().isLength({ max: 255 }),
   request_activation,
 );
 app.post(
   "/log_in",
-  body("username").isAlphanumeric().isLength({ min: 4, max: 255 }),
+  body("username").isAscii().isLength({ min: 4, max: 255 }),
   body("password").isAscii().isLength({ min: 8, max: 255 }),
   log_in,
 );
@@ -166,12 +167,7 @@ app.post(
   rate_recipe,
 );
 app.get("/recipe_data", query("uuid").isUUID(), get_recipe);
-app.post(
-  "/add_type",
-  access_token_validator,
-  body("type").isAscii().isLength({ max: 255 }),
-  add_type,
-);
+
 app.get("/get_types", get_types);
 app.post(
   "/add_to_list",
@@ -188,7 +184,7 @@ app.delete(
 app.get("/list", access_token_validator, get_list);
 app.post(
   "/request_change_password",
-  access_token_validator,
+  body("email").isEmail(),
   request_password_change,
 );
 app.post(
@@ -199,7 +195,7 @@ app.post(
 );
 app.get(
   "/get_user_data",
-  query("username").isAlphanumeric().isLength({ min: 4, max: 255 }),
+  query("username").isAscii().isLength({ min: 4, max: 255 }),
   get_user_data,
 );
 app.post("/refresh", refresh);

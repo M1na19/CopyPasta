@@ -1,16 +1,20 @@
-import nodemailer from 'nodemailer'
-import dotenv from 'dotenv'
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
 
-const link_website="";
-const link_recovery=""
-const link_confirm=""
+const link_website = "http://localhost:5173";
+const link_recovery = "http://localhost:5173/recover/";
+const link_confirm = "http://localhost:8000/activate_account/";
 
-export async function sendPasswordMail(transporter:nodemailer.Transporter,mail:string,token:string) {
-    var mailOptions = {
-        from: 'youremail@gmail.com',
-        to: mail,
-        subject: 'Schimbare parola copypasta',
-        html:`<!DOCTYPE html>
+export async function sendPasswordMail(
+  transporter: nodemailer.Transporter,
+  mail: string,
+  token: string,
+) {
+  var mailOptions = {
+    from: "youremail@gmail.com",
+    to: mail,
+    subject: "Schimbare parola copypasta",
+    html: `<!DOCTYPE html>
                 <html lang="ro">
                 <head>
                     <meta charset="UTF-8">
@@ -80,8 +84,8 @@ export async function sendPasswordMail(transporter:nodemailer.Transporter,mail:s
                         </div>
                         <div class="content">
                             <p>Bună,</p>
-                            <p>Ai solicitat resetarea parolei contului tău de pe <strong>Copypasta</strong>. Pentru a-ți reseta parola, te rugăm să apeși pe butonul de mai jos:</p>
-                            <a href="{${link_recovery+token}}" class="button">Resetează Parola</a>
+                            <p>Ai solicitat resetarea parolei contului tău de pe <strong>Copypasta</strong>. Pentru a-ți reseta parola, te rugăm să folosesti linkul:</p>
+                            <p>${link_recovery + token}</p>
                             <p>Dacă nu ai solicitat această resetare, poți ignora acest email.</p>
                             <p>Cu drag,<br>Echipa Copypasta</p>
                         </div>
@@ -92,17 +96,21 @@ export async function sendPasswordMail(transporter:nodemailer.Transporter,mail:s
                     </div>
                 </body>
                 </html>
-                `
-    };
-    
-    return transporter.sendMail(mailOptions);
+                `,
+  };
+
+  return transporter.sendMail(mailOptions);
 }
-export async function sendSignUpMail(transporter:nodemailer.Transporter,mail:string,token:string) {
-    var mailOptions = {
-        from: 'youremail@gmail.com',
-        to: mail,
-        subject: 'Schimbare parola copypasta',
-        html:`<!DOCTYPE html>
+export async function sendSignUpMail(
+  transporter: nodemailer.Transporter,
+  mail: string,
+  token: string,
+) {
+  var mailOptions = {
+    from: "youremail@gmail.com",
+    to: mail,
+    subject: "Creare cont copypasta",
+    html: `<!DOCTYPE html>
                 <html lang="ro">
                 <head>
                     <meta charset="UTF-8">
@@ -173,8 +181,8 @@ export async function sendSignUpMail(transporter:nodemailer.Transporter,mail:str
                         <div class="content">
                             <p>Bună,</p>
                             <p>Îți mulțumim că te-ai alăturat comunității <strong>Copypasta</strong>, locul perfect pentru rețete delicioase și inspirație culinară!</p>
-                            <p>Ca să finalizezi înregistrarea, te rugăm să confirmi adresa de email apăsând pe butonul de mai jos:</p>
-                            <a href="{${link_confirm+token}}" class="button">Confirmă Email-ul</a>
+                            <p>Ca să finalizezi înregistrarea, te rugăm să confirmi adresa de email cu linkul de mai jos:</p>
+                            <p>${link_confirm + token}</p>
                             <p>Dacă nu ai făcut această înregistrare, te rugăm să ignori acest email.</p>
                             <p>Cu drag,<br>Echipa Copypasta</p>
                         </div>
@@ -185,8 +193,8 @@ export async function sendSignUpMail(transporter:nodemailer.Transporter,mail:str
                     </div>
                 </body>
                 </html>
-                `
-    };
-    
-    return transporter.sendMail(mailOptions);
+                `,
+  };
+
+  return transporter.sendMail(mailOptions);
 }

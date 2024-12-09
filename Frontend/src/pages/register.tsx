@@ -1,10 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, createRef } from "react";
 import { NavbarCopyPasta, Background, Card } from "./modules";
-import { is_logged_in } from "../requests";
+import { is_logged_in, request } from "../requests";
 
 function Register() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-
+  const usernameRef = createRef<HTMLInputElement>();
+  const nameRef = createRef<HTMLInputElement>();
+  const emailRef = createRef<HTMLInputElement>();
+  const telRef = createRef<HTMLInputElement>();
+  const passRef = createRef<HTMLInputElement>();
+  const cPassRef = createRef<HTMLInputElement>();
+  const descRef = createRef<HTMLTextAreaElement>();
+  const imageRef = createRef<HTMLInputElement>();
   useEffect(() => {
     is_logged_in().then((l) => {
       setIsLoggedIn(l);
@@ -32,7 +39,12 @@ function Register() {
             </b>
             <div className="flex flex-col mt-10 items-center max-sm:space-y-2 space-y-10 max-y-[100px] w-full">
               <div className="flex items-center space-x-4">
-                <input id="file-upload" type="file" className="hidden"></input>
+                <input
+                  id="file-upload"
+                  ref={imageRef}
+                  type="file"
+                  className="hidden"
+                ></input>
                 <label
                   htmlFor="file-upload"
                   className="cursor-pointer bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
@@ -56,6 +68,7 @@ function Register() {
                   />
                 </svg>
                 <input
+                  ref={usernameRef}
                   type="text"
                   className="bg-transparent border-transparent outline-none text-white w-full"
                   placeholder="Nume utilizator"
@@ -77,6 +90,7 @@ function Register() {
                   />
                 </svg>
                 <input
+                  ref={nameRef}
                   type="text"
                   className="bg-transparent border-transparent outline-none text-white w-full"
                   placeholder="Nume"
@@ -98,6 +112,7 @@ function Register() {
                   />
                 </svg>
                 <input
+                  ref={emailRef}
                   type="text"
                   className="bg-transparent border-transparent outline-none text-white w-full"
                   placeholder="Email"
@@ -119,6 +134,7 @@ function Register() {
                   />
                 </svg>
                 <input
+                  ref={telRef}
                   type="tel"
                   className="bg-transparent border-transparent outline-none text-white w-full"
                   placeholder="Telefon"
@@ -140,7 +156,8 @@ function Register() {
                   />
                 </svg>
                 <input
-                  type="text"
+                  ref={passRef}
+                  type="password"
                   className="bg-transparent border-transparent outline-none text-white w-full"
                   placeholder="Parola"
                 ></input>
@@ -161,19 +178,60 @@ function Register() {
                   />
                 </svg>
                 <input
-                  type="text"
+                  ref={cPassRef}
+                  type="password"
                   className="bg-transparent border-transparent outline-none text-white w-full"
                   placeholder="Confirmare Parola"
                 ></input>
               </div>
               <div className="flex items-center space-x-4 border-2 rounded-xl border-white w-full max-h-32">
                 <textarea
+                  ref={descRef}
                   className="bg-transparent border-transparent outline-none text-white w-full h-full"
                   placeholder="Descriere"
                 ></textarea>
               </div>
             </div>
-            <button className="flex items-center justify-center bg-green-500 mt-[5vw] md:mt-20 mb-10 rounded-2xl">
+            <button
+              className="flex items-center justify-center bg-green-500 mt-[5vw] md:mt-20 mb-10 rounded-2xl"
+              onClick={() => {
+                const formData = new FormData();
+                if (
+                  !(
+                    usernameRef.current &&
+                    emailRef.current &&
+                    passRef.current &&
+                    cPassRef.current &&
+                    cPassRef.current.value == passRef.current.value
+                  )
+                ) {
+                  console.log("Not enough necessary info");
+                  return;
+                }
+                formData.append("username", usernameRef.current.value);
+                formData.append("email", emailRef.current.value);
+                formData.append("password", passRef.current.value);
+                if (nameRef.current && nameRef.current.value != "") {
+                  formData.append("name", nameRef.current.value);
+                }
+                if (telRef.current && telRef.current.value != "") {
+                  formData.append("telephone", telRef.current.value);
+                }
+                if (descRef.current && descRef.current.value != "") {
+                  formData.append("description", descRef.current.value);
+                }
+                if (imageRef.current && imageRef.current.files?.length == 1) {
+                  formData.append("file", imageRef.current.files[0]);
+                }
+                request(
+                  "http://localhost:8000/request_sign_up",
+                  "POST",
+                  formData,
+                ).then(() => {
+                  window.location.href = "/";
+                });
+              }}
+            >
               <b className="text-white px-10 py-2">Register</b>
             </button>
           </Card>

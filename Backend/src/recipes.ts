@@ -3,48 +3,68 @@ import { prisma } from "../api";
 import { UUID } from "crypto";
 import { validationResult } from "express-validator";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
-
+import crypto from "crypto";
+import { lib } from "crypto-js";
 export async function get_list(req: Request, res: Response) {
   if (!validationResult(req).isEmpty()) {
     res.status(400).json({ success: false });
     return;
   }
-
   let user = res.locals.username;
   try {
-    let list = await prisma.privateList.findMany({
-      where: {
-        users: {
-          username: user,
-        },
-      },
-      include: {
-        recipes: {
-          select: {
-            uuid: true,
-            name: true,
-            images: true,
-            rating: true,
-            users: {
-              select: {
-                username: true,
-              },
-            },
-            types: {
-              select: {
-                name: true,
-              },
-            },
-            cookingTime: true,
-            difficulty: true,
-            uploadTime: true,
+    let list = (
+      await prisma.privateList.findMany({
+        where: {
+          users: {
+            username: user,
           },
         },
-      },
+        include: {
+          recipes: {
+            select: {
+              uuid: true,
+              name: true,
+              images: true,
+              rating: true,
+              users: {
+                select: {
+                  username: true,
+                },
+              },
+              types: {
+                select: {
+                  name: true,
+                },
+              },
+              cookingTime: true,
+              difficulty: true,
+              uploadTime: true,
+            },
+          },
+        },
+      })
+    ).map((l) => {
+      const rec = l.recipes;
+      let parse = {
+        uuid: rec.uuid,
+        name: rec.name,
+        images: rec.images?.split(";"),
+        rating: rec.rating,
+        users: {
+          username: rec.users.username,
+        },
+        types: {
+          name: rec.types?.name,
+        },
+        cookingTime: rec.cookingTime,
+        difficulty: rec.difficulty,
+        uploadTime: rec.uploadTime,
+      };
+      return parse;
     });
     res.status(200).json({
       success: true,
-      list: list.map((m) => m.recipes),
+      list: list,
     });
   } catch (e) {
     res.status(500).json({
@@ -76,26 +96,45 @@ export async function get_types(req: Request, res: Response) {
 }
 export async function get_all_recipes(req: Request, res: Response) {
   try {
-    let recipes = await prisma.recipes.findMany({
-      select: {
-        uuid: true,
-        name: true,
-        images: true,
-        rating: true,
-        users: {
-          select: {
-            username: true,
+    let recipes = (
+      await prisma.recipes.findMany({
+        select: {
+          uuid: true,
+          name: true,
+          images: true,
+          rating: true,
+          users: {
+            select: {
+              username: true,
+            },
           },
+          types: {
+            select: {
+              name: true,
+            },
+          },
+          cookingTime: true,
+          difficulty: true,
+          uploadTime: true,
+        },
+      })
+    ).map((rec) => {
+      let parse = {
+        uuid: rec.uuid,
+        name: rec.name,
+        images: rec.images?.split(";"),
+        rating: rec.rating,
+        users: {
+          username: rec.users.username,
         },
         types: {
-          select: {
-            name: true,
-          },
+          name: rec.types?.name,
         },
-        cookingTime: true,
-        difficulty: true,
-        uploadTime: true,
-      },
+        cookingTime: rec.cookingTime,
+        difficulty: rec.difficulty,
+        uploadTime: rec.uploadTime,
+      };
+      return parse;
     });
     res.status(200).json({
       success: true,
@@ -140,9 +179,25 @@ export async function get_recipe(req: Request, res: Response) {
         uploadTime: true,
       },
     });
+    let parse = {
+      uuid: recipe.uuid,
+      name: recipe.name,
+      images: recipe.images?.split(";"),
+      rating: recipe.rating,
+      users: {
+        username: recipe.users.username,
+      },
+      types: {
+        name: recipe.types?.name,
+      },
+      cookingTime: recipe.cookingTime,
+      difficulty: recipe.difficulty,
+      uploadTime: recipe.uploadTime,
+      description: recipe.description,
+    };
     res.status(200).json({
       success: true,
-      recipe: recipe,
+      recipe: parse,
     });
   } catch (e) {
     if (e instanceof PrismaClientKnownRequestError && e.code == "P2025") {
@@ -188,18 +243,24 @@ export async function get_all_reviews(req: Request, res: Response) {
 }
 export async function post_recipe(req: Request, res: Response) {
   if (!validationResult(req).isEmpty()) {
+    console.log(validationResult(req));
     res.status(400).json({ success: false });
     return;
   }
 
   let name = req.body.name;
   let author = res.locals.username;
-  let images = req.body.images || null;
+  let images = (req.files as Express.Multer.File[])?.map((file) => {
+    return "/upload_images/" + file.filename;
+  });
   let type = req.body.type;
-  let cookTime = req.body.cookTime || null;
-  let difficulty = req.body.difficulty || null;
+  let cookTime: number | null = req.body.cookTime
+    ? Number(req.body.cookTime)
+    : null;
+  let difficulty: number | null = req.body.difficulty
+    ? Number(req.body.difficulty)
+    : null;
   let description = req.body.description || null;
-
   try {
     let stringified: string | null = null;
     if (images != null) stringified = images.join(";");
@@ -214,8 +275,13 @@ export async function post_recipe(req: Request, res: Response) {
         uuid: crypto.randomUUID(),
         images: stringified,
         types: {
-          connect: {
-            name: type,
+          connectOrCreate: {
+            where: {
+              name: type,
+            },
+            create: {
+              name: type,
+            },
           },
         },
         cookingTime: cookTime,
@@ -226,6 +292,7 @@ export async function post_recipe(req: Request, res: Response) {
 
     res.status(200).json({ success: true });
   } catch (e) {
+    console.log(e);
     if (e instanceof PrismaClientKnownRequestError && e.code == "P2025") {
       res.status(400).json({ success: false, error: "Input not found in db" });
     } else {
@@ -315,31 +382,6 @@ export async function rate_recipe(req: Request, res: Response) {
     }
   }
 }
-export async function add_type(req: Request, res: Response) {
-  if (!validationResult(req).isEmpty()) {
-    res.status(400).json({ success: false });
-    return;
-  }
-
-  let type = req.body.type;
-  try {
-    await prisma.types.create({
-      data: {
-        name: type,
-      },
-    });
-    res.status(200).json({ success: true });
-  } catch (e) {
-    if (e instanceof PrismaClientKnownRequestError && e.code == "P2002") {
-      res.status(400).json({
-        success: false,
-        error: "Type with the same name already exists",
-      });
-    } else {
-      res.status(500).json({ success: false });
-    }
-  }
-}
 
 export async function add_favorite(req: Request, res: Response) {
   if (!validationResult(req).isEmpty()) {
@@ -368,6 +410,11 @@ export async function add_favorite(req: Request, res: Response) {
   } catch (e) {
     if (e instanceof PrismaClientKnownRequestError && e.code == "P2025") {
       res.status(400).json({ success: false, error: "Input not found in db" });
+    } else if (
+      e instanceof PrismaClientKnownRequestError &&
+      e.code == "P2002"
+    ) {
+      res.status(400).json({ success: false, error: "Recipe already in list" });
     } else {
       res.status(500).json({ success: false });
     }

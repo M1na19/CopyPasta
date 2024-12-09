@@ -3,9 +3,10 @@ import { NavbarCopyPasta, Background, Card } from "./modules";
 import Cookies from "js-cookie";
 import { is_logged_in, request } from "../requests";
 
-function Forgor() {
+function Forgor_Fill() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const emailRef = createRef<HTMLInputElement>();
+  const newPassRef = createRef<HTMLInputElement>();
+  const newPassConfirmRef = createRef<HTMLInputElement>();
   useEffect(() => {
     is_logged_in().then((l) => setIsLoggedIn(l));
   }, []);
@@ -39,14 +40,36 @@ function Forgor() {
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"
-                    d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"
+                    d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
                   />
                 </svg>
                 <input
-                  ref={emailRef}
-                  type="text"
+                  ref={newPassRef}
+                  type="password"
                   className="bg-transparent border-transparent outline-none text-white w-full"
-                  placeholder="Email"
+                  placeholder="Parola Noua"
+                ></input>
+              </div>
+              <div className="flex items-center space-x-4 border-b-2 border-white w-full">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  className="stroke-white max-sm:min-w-[7vw] max-sm:h-[7vw] h-10"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
+                  />
+                </svg>
+                <input
+                  ref={newPassConfirmRef}
+                  type="password"
+                  className="bg-transparent border-transparent outline-none text-white w-full"
+                  placeholder="Confirma Parola"
                 ></input>
               </div>
             </div>
@@ -54,16 +77,23 @@ function Forgor() {
               <b
                 className="text-white px-10 py-2"
                 onClick={() => {
+                  if (
+                    newPassRef.current?.value !=
+                    newPassConfirmRef.current?.value
+                  ) {
+                    console.warn("Password doesnt match");
+                    return;
+                  }
                   request(
-                    "http://localhost:8000/request_change_password",
+                    `http://localhost:8000/change_password/${window.location.pathname.split("/").at(-1)}`,
                     "POST",
                     {
-                      email: emailRef.current?.value,
+                      password: newPassRef.current?.value,
                     },
                   ).then(() => (window.location.href = "/"));
                 }}
               >
-                Send Email
+                Send
               </b>
             </button>
           </Card>
@@ -79,4 +109,4 @@ function Forgor() {
     </>
   );
 }
-export default Forgor;
+export default Forgor_Fill;

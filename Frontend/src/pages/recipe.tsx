@@ -1,4 +1,4 @@
-import React, { createRef } from "react";
+import React, { createRef, useEffect, useState } from "react";
 import { Recipe, request, Review } from "../requests";
 import { StarBuilder } from "./modules";
 import Cookies from "js-cookie";
@@ -12,6 +12,8 @@ class RecipePopUp extends React.Component<{
     recipe: null as Recipe | null,
     reviews: [] as Review[],
     rating_given: 0 as number,
+    isLoggedIn: false,
+    isOnList: false,
   };
   componentDidMount() {
     request(
@@ -28,10 +30,20 @@ class RecipePopUp extends React.Component<{
       const reviews = data.reviews as Review[];
       this.setState({ reviews: reviews });
     });
+    is_logged_in().then((l) => {
+      this.setState({ isLoggedIn: l });
+      request("http://localhost:8000/list", "GET").then((data) => {
+        const list = data.list as Recipe[];
+        const result = list.find((value) => {
+          return value.uuid == this.state.recipe?.uuid;
+        });
+        if (result != undefined) {
+          this.setState({ isOnList: true });
+        }
+      });
+    });
   }
   render(): React.ReactNode {
-    const token = Cookies.get("AccessToken");
-    const is_logged = token ? true : false;
     const rec = this.state.recipe;
     const p_image = rec
       ? rec.images
@@ -43,6 +55,7 @@ class RecipePopUp extends React.Component<{
     const popup_ref = createRef<HTMLDivElement>();
 
     const starRef = createRef<HTMLDivElement>();
+    const commentRef = createRef<HTMLTextAreaElement>();
     document.body.style.overflow = "hidden";
     return (
       <>
@@ -103,7 +116,7 @@ class RecipePopUp extends React.Component<{
                 </div>
               </div>
             </div>
-            {is_logged ? (
+            {this.state.isLoggedIn ? (
               <div className="flex flex-col w-min-[1000px]:ml-auto mt-10">
                 <b className="w-full flex justify-center text-2xl">
                   Rate this recipe
@@ -138,10 +151,33 @@ class RecipePopUp extends React.Component<{
                   <StarBuilder num_stars={this.state.rating_given} />
                 </div>
                 <textarea
+                  ref={commentRef}
                   className="mt-5"
                   placeholder="Leave a comment"
                 ></textarea>
-                <button className="mt-5 bg-green-300 text-center rounded-xl py-1 w-20 ml-auto">
+                <button
+                  className="mt-5 bg-green-300 text-center rounded-xl py-1 w-20 ml-auto"
+                  onClick={() => {
+                    if (commentRef.current) {
+                      const comment = commentRef.current.value;
+                      commentRef.current.value = ""; // Clear the input immediately
+                      request("http://localhost:8000/rate_recipe", "POST", {
+                        uuid: rec?.uuid,
+                        rating: this.state.rating_given,
+                        comment: comment,
+                      })
+                        .then(() => {
+                          this.setState({ rating_given: 0 });
+                          this.componentDidMount();
+                        })
+                        .catch((err) => {
+                          console.error("Failed to submit rating:", err);
+                        });
+                    } else {
+                      console.error("Comment input is not available.");
+                    }
+                  }}
+                >
                   Submit
                 </button>
               </div>
@@ -164,7 +200,7 @@ class RecipePopUp extends React.Component<{
               <></>
             )}
           </div>
-          <div className="flex flex-col px-10">
+          <div className="flex flex-col px-10 mt-10">
             <b className="text-2xl text-red-500 w-full border-b-2 border-b-red-500">
               Reviews
             </b>
@@ -181,12 +217,30 @@ class RecipePopUp extends React.Component<{
                     <div className="h-10">
                       <StarBuilder num_stars={rev.rating} />
                     </div>
-                    <p>{rev.comment}</p>
+                    <p className="w-full flex justify-start">{rev.comment}</p>
                   </div>
                 </>
               );
             })}
           </div>
+          {this.state.isLoggedIn && !this.state.isOnList ? (
+            <div className="w-full flex items-center justify-center mt-10">
+              <button
+                className="bg-green-400 text-white px-5 py-1 rounded-xl"
+                onClick={() => {
+                  request("http://localhost:8000/add_to_list", "POST", {
+                    uuid: rec?.uuid,
+                  }).then(() => {
+                    this.componentDidMount();
+                  });
+                }}
+              >
+                Add to my list
+              </button>
+            </div>
+          ) : (
+            <></>
+          )}
         </div>
       </>
     );

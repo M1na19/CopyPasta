@@ -8,6 +8,7 @@ import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { sendPasswordMail, sendSignUpMail } from "./mail";
 const refresh_token_exp = 28;
 const sign_up_pass_exp = 1;
+
 export class TokenAPI {
   static access_expiration: number = 2;
   static secret: string = process.env.SECRET as string;
@@ -59,6 +60,7 @@ export class TokenAPI {
 }
 export async function request_sign_up(req: Request, res: Response) {
   if (!validationResult(req).isEmpty()) {
+    console.log(validationResult(req));
     res.status(400).json({ success: false });
     return;
   }
@@ -66,7 +68,7 @@ export async function request_sign_up(req: Request, res: Response) {
   let username = req.body.username;
   let name = req.body.name || null;
   let password = req.body.password;
-  let image = req.body.image || null;
+  let image = req.file?.filename ? "/upload_images/" + req.file.filename : null;
   let email = req.body.email;
   let telephone = req.body.telephone || null;
   let description = req.body.description || null;
@@ -165,9 +167,7 @@ export async function request_activation(req: Request, res: Response) {
       });
     });
 
-    res.status(200).json({
-      success: true,
-    });
+    res.redirect("http://localhost:5173/");
   } catch (e: any) {
     if (e instanceof PrismaClientKnownRequestError && e.code == "P2025") {
       res.status(400).json({ success: false, error: "Input not found in db" });
@@ -302,20 +302,20 @@ export async function request_password_change(req: Request, res: Response) {
     return;
   }
 
-  let user = res.locals.username;
+  let email = req.body.email;
   try {
     let exp = new Date();
     exp.setDate(exp.getDate() + sign_up_pass_exp);
-    const email = (
+    const user = (
       await prisma.users.findUniqueOrThrow({
         where: {
-          username: user,
+          email: email,
         },
         select: {
-          email: true,
+          username: true,
         },
       })
-    ).email;
+    ).username;
     await prisma.authTokens.deleteMany({
       where: {
         purpose: "PASSWORD",

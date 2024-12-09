@@ -27,8 +27,8 @@ class List extends React.Component {
     }
     const images: React.ReactNode[] = [];
     this.state.full_search.forEach((rec, idx) => {
-      if (rec.images == null) {
-        rec.images = ["basic.webp"];
+      if (rec.images == null || rec.images[0] == "") {
+        rec.images = ["/images/basic.webp"];
       }
       images.push(
         <React.Fragment key={idx}>
@@ -50,7 +50,7 @@ class List extends React.Component {
               />
             )}
             <img
-              src={`/images/${rec.images![0]}`}
+              src={`${rec.images![0]}`}
               className="max-w-56 h-56 border-r-green-700 border-2"
             ></img>
             <div className="bg-white max-w-56 h-56 flex flex-col items-center">

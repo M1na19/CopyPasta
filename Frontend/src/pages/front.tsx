@@ -41,16 +41,13 @@ class RecipePromo extends React.Component {
     if (width > 800) nr++;
     if (width > 1200) nr++;
     recipes = recipes.slice(0, nr);
-
-    recipes.map((rec) => {
-      if (rec.images == null) {
-        rec.images = ["basic.webp"];
-      }
-    });
   }
   render(): React.ReactNode {
     const images: React.ReactNode[] = [];
     this.state.data.forEach((rec, idx) => {
+      if (rec.images == null || rec.images[0] == "") {
+        rec.images = ["/images/basic.webp"];
+      }
       images.push(
         <React.Fragment key={idx}>
           <button
@@ -71,7 +68,7 @@ class RecipePromo extends React.Component {
               />
             )}
             <img
-              src={`/images/${rec.images![0]}`}
+              src={`${rec.images![0]}`}
               className="max-w-56 h-56 border-r-green-700 border-2"
             />
             <div className="bg-white max-w-56 h-56 flex flex-col items-center">
