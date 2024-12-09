@@ -12,7 +12,7 @@ class RecipePopUp extends React.Component<{
     recipe: null as Recipe | null,
     reviews: [] as Review[],
     rating_given: 0 as number,
-    isLoggedIn: false,
+    loggedIn: null as string | null,
     isOnList: false,
   };
   componentDidMount() {
@@ -30,8 +30,8 @@ class RecipePopUp extends React.Component<{
       const reviews = data.reviews as Review[];
       this.setState({ reviews: reviews });
     });
-    is_logged_in().then((l) => {
-      this.setState({ isLoggedIn: l });
+    request("http://localhost:8000/logged_in", "GET").then((data) => {
+      this.setState({ loggedIn: data.username });
       request("http://localhost:8000/list", "GET").then((data) => {
         const list = data.list as Recipe[];
         const result = list.find((value) => {
@@ -116,7 +116,7 @@ class RecipePopUp extends React.Component<{
                 </div>
               </div>
             </div>
-            {this.state.isLoggedIn ? (
+            {this.state.loggedIn != null ? (
               <div className="flex flex-col w-min-[1000px]:ml-auto mt-10">
                 <b className="w-full flex justify-center text-2xl">
                   Rate this recipe
@@ -223,20 +223,55 @@ class RecipePopUp extends React.Component<{
               );
             })}
           </div>
-          {this.state.isLoggedIn && !this.state.isOnList ? (
-            <div className="w-full flex items-center justify-center mt-10">
-              <button
-                className="bg-green-400 text-white px-5 py-1 rounded-xl"
-                onClick={() => {
-                  request("http://localhost:8000/add_to_list", "POST", {
-                    uuid: rec?.uuid,
-                  }).then(() => {
-                    this.componentDidMount();
-                  });
-                }}
-              >
-                Add to my list
-              </button>
+          {this.state.loggedIn != null ? (
+            <div className="w-full flex flex-wrap items-center justify-center mt-10 ">
+              {!this.state.isOnList ? (
+                <button
+                  className="bg-green-400 text-white px-5 py-1 rounded-xl m-5"
+                  onClick={() => {
+                    request("http://localhost:8000/add_to_list", "POST", {
+                      uuid: rec?.uuid,
+                    }).then(() => {
+                      this.setState({ isOnList: true });
+                    });
+                  }}
+                >
+                  Add to my list
+                </button>
+              ) : (
+                <button
+                  className="bg-red-400 text-white px-5 py-1 rounded-xl m-5"
+                  onClick={() => {
+                    request(
+                      "http://localhost:8000/remove_from_list",
+                      "DELETE",
+                      {
+                        uuid: rec?.uuid,
+                      },
+                    ).then(() => {
+                      this.setState({ isOnList: false });
+                    });
+                  }}
+                >
+                  Remove from list
+                </button>
+              )}
+              {rec?.users.username == this.state.loggedIn ? (
+                <button
+                  className="bg-red-400 text-white px-5 py-1 rounded-xl m-5"
+                  onClick={() => {
+                    request("http://localhost:8000/remove_recipe", "DELETE", {
+                      uuid: rec?.uuid,
+                    }).then(() => {
+                      window.location.reload();
+                    });
+                  }}
+                >
+                  Remove recipe
+                </button>
+              ) : (
+                <></>
+              )}
             </div>
           ) : (
             <></>
