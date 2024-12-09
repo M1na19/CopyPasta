@@ -7,6 +7,14 @@
 ## Mod de utilizare
 - Versiune Node 18.20.5
 - Toate resursele node trebuie instalate
+- Trebuie sa existe un ***.env*** in Backend
+```env
+DATABASE_URL=mysql://<username>:<password>@localhost:3306/copypasta
+SECRET=""
+PORT=8000
+MAIL=""
+MAIL_PASS=""
+```
 - Backend-ul trebuie pornit din folderul *Backend* folosind comanda:
   ```bash
   npx ts-node api.ts
