@@ -183,7 +183,7 @@ class RecipePopUp extends React.Component<{
               </div>
             ) : null}
           </div>
-          <div className="flex flex-col px-10">
+          <div className="flex flex-col items-start px-10">
             <b className="text-2xl text-green-500 w-full border-b-2 border-b-green-500">
               Description
             </b>
